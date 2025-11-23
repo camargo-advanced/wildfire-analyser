@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Wildfire Assessment Viewer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.5/dist/leaflet.css" />
+    <style>
+        body { margin: 0; display: flex; height: 100vh; }
+        #mapBefore, #mapAfter { flex: 1; }
+    </style>
+</head>
+<body>
+    <div id="mapBefore"></div>
+    <div id="mapAfter"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.5/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.sync/L.Map.Sync.js"></script> <!-- opcional para sincronizar -->
+
+    <script>
+        // Substitua pelos tile URLs gerados pelo AssessmentRunner
+        const beforeTileUrl = "https://earthengine.googleapis.com/v1/projects/earthengine-legacy/maps/27ac0a6b3534505cc3b716782c4e4ef2-08355ec540577e7acc9eb05c89417bd6/tiles/{z}/{x}/{y}";
+        const afterTileUrl  = "https://earthengine.googleapis.com/v1/projects/earthengine-legacy/maps/b55d63cfe94b1015ab194d69b3653037-a7de9ff1f7bcedccc0495a1372a56a7b/tiles/{z}/{x}/{y}";
+
+        // Coordenadas aproximadas do centro da sua ROI
+        const centerLat = -23.2;
+        const centerLng = -46.7;
+        const zoomLevel = 10;
+
+        // Map BEFORE
+        const mapBefore = L.map('mapBefore').setView([centerLat, centerLng], zoomLevel);
+        L.tileLayer(beforeTileUrl, {
+            attribution: "Google Earth Engine",
+            maxZoom: 20
+        }).addTo(mapBefore);
+
+        // Map AFTER
+        const mapAfter = L.map('mapAfter').setView([centerLat, centerLng], zoomLevel);
+        L.tileLayer(afterTileUrl, {
+            attribution: "Google Earth Engine",
+            maxZoom: 20
+        }).addTo(mapAfter);
+
+        // Sincroniza os dois mapas (opcional)
+        mapBefore.sync(mapAfter);
+        mapAfter.sync(mapBefore);
+    </script>
+</body>
+</html>
