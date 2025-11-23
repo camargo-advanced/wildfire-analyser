@@ -19,5 +19,5 @@ deactivate
 
 5) Run assessment:
 
-python3 -m src.assessment_runner
+python3 -m wildfire.fire_assessment.assessment_runner
 
