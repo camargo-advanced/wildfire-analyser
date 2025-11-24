@@ -1,11 +1,11 @@
-# assessment_runner.py
+# post_fire_assessment.py
 import logging
 from datetime import datetime, timedelta
 import ee
 import os
 
-from wildfire.fire_assessment.gee_client import GEEClient
-from wildfire.fire_assessment.geometry_loader import GeometryLoader
+from wildfire_analyser.fire_assessment.gee_client import GEEClient
+from wildfire_analyser.fire_assessment.geometry_loader import GeometryLoader
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +14,16 @@ CLOUD_THRESHOLD = 100
 COLLECTION_ID = "COPERNICUS/S2_SR_HARMONIZED"
 
 
-class AssessmentRunner:
-    def __init__(self, gee_client: GEEClient, roi: ee.Geometry):
+class PostFireAssessment:
+    def __init__(self, geojson_path: str, start_date: str, end_date: str):
         """
         Receives an initialized GEEClient and a Region of Interest (ROI).
         """
-        self.gee = gee_client.ee
-        self.roi = roi
+        self.gee_client = GEEClient()
+        self.gee = self.gee_client.ee
+        self.roi = GeometryLoader.load_geojson(geojson_path)
+        self.start_date = start_date
+        self.end_date = end_date
 
     def _expand_dates(self, start_date: str, end_date: str):
         sd = datetime.strptime(start_date, "%Y-%m-%d")
@@ -56,12 +59,12 @@ class AssessmentRunner:
         collection = collection.map(preprocess)
 
         # Debug: listar bandas da primeira imagem usando getInfo apenas para este debug
-        try:
-            first_image = ee.Image(collection.first())
-            band_names = first_image.bandNames().getInfo()  # apenas para debug
-            logger.info(f"Bands in first image: {band_names}")
-        except Exception as e:
-            logger.warning(f"Unable to fetch band names for debug: {e}")
+        # try:
+        #     first_image = ee.Image(collection.first())
+        #     band_names = first_image.bandNames().getInfo()  # apenas para debug
+        #     logger.info(f"Bands in first image: {band_names}")
+        # except Exception as e:
+        #     logger.warning(f"Unable to fetch band names for debug: {e}")
 
         return collection
 
@@ -88,7 +91,7 @@ class AssessmentRunner:
         abs_path = os.path.abspath(filename)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
 
-        logger.info(f"Downloading mosaic to {abs_path} with scale {scale}m ...")
+        # logger.info(f"Downloading mosaic to {abs_path} with scale {scale}m ...")
         
         geemap.download_ee_image(
             image=mosaic.clip(self.roi),
@@ -100,7 +103,7 @@ class AssessmentRunner:
             max_cpus=2            # limita threads locais
         )
 
-        logger.info(f"Mosaic saved at {abs_path}")
+        # logger.info(f"Mosaic saved at {abs_path}")
 
     def get_cloud_percentage(self, mosaic: ee.Image):
         qa = mosaic.select('QA60')
@@ -128,8 +131,8 @@ class AssessmentRunner:
         if size_val == 0:
             raise ValueError(f"No images found for {label}: {start} → {end}")
         
-    def run_analysis(self, start_date: str, end_date: str):
-        before_start, before_end, after_start, after_end = self._expand_dates(start_date, end_date)
+    def run_analysis(self):
+        before_start, before_end, after_start, after_end = self._expand_dates(self.start_date, self.end_date)
 
         # Carrega a coleção completa apenas uma vez
         full_collection = self._load_full_collection()
@@ -139,11 +142,11 @@ class AssessmentRunner:
         self._ensure_not_empty(before_col, "BEFORE period", before_start, before_end)
 
         # Debug: IDs das imagens BEFORE
-        try:
-            before_ids = before_col.aggregate_array('system:id').getInfo()
-            logger.info(f"Images used for BEFORE mosaic ({before_start} → {before_end}): {before_ids}")
-        except Exception as e:
-            logger.warning(f"Couldn't fetch BEFORE image IDs: {e}")
+        # try:
+        #     before_ids = before_col.aggregate_array('system:id').getInfo()
+        #     logger.info(f"Images used for BEFORE mosaic ({before_start} → {before_end}): {before_ids}")
+        # except Exception as e:
+        #     logger.warning(f"Couldn't fetch BEFORE image IDs: {e}")
 
         before_mosaic = before_col.mosaic()
         before_ndvi = before_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('NDVI')
@@ -155,11 +158,11 @@ class AssessmentRunner:
         self._ensure_not_empty(after_col, "AFTER period", after_start, after_end)
 
         # Debug: IDs das imagens AFTER
-        try:
-            after_ids = after_col.aggregate_array('system:id').getInfo()
-            logger.info(f"Images used for AFTER mosaic ({after_start} → {after_end}): {after_ids}")
-        except Exception as e:
-            logger.warning(f"Couldn't fetch AFTER image IDs: {e}")
+        # try:
+        #     after_ids = after_col.aggregate_array('system:id').getInfo()
+        #     logger.info(f"Images used for AFTER mosaic ({after_start} → {after_end}): {after_ids}")
+        # except Exception as e:
+        #     logger.warning(f"Couldn't fetch AFTER image IDs: {e}")
 
         after_mosaic = after_col.mosaic()
         after_ndvi = after_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('NDVI')
@@ -167,16 +170,18 @@ class AssessmentRunner:
         after_mosaic = after_mosaic.addBands([after_ndvi, after_nbr])
 
         # Calcula percentual de nuvens (EE Number)
-        before_cloud_pct = self.get_cloud_percentage(before_mosaic)
-        after_cloud_pct = self.get_cloud_percentage(after_mosaic)
+        # before_cloud_pct = self.get_cloud_percentage(before_mosaic)
+        # after_cloud_pct = self.get_cloud_percentage(after_mosaic)
 
         # Converte para número Python
-        before_cloud_pct_val = before_cloud_pct.getInfo()
-        after_cloud_pct_val = after_cloud_pct.getInfo()
+        before_cloud_pct_val = 0
+        after_cloud_pct_val = 0
+        # before_cloud_pct_val = before_cloud_pct.getInfo()
+        # after_cloud_pct_val = after_cloud_pct.getInfo()
 
         # Log com duas casas decimais
-        logger.info(f"Cloud % BEFORE: {before_cloud_pct_val:.2f}%")
-        logger.info(f"Cloud % AFTER: {after_cloud_pct_val:.2f}%")
+        # logger.info(f"Cloud % BEFORE: {before_cloud_pct_val:.2f}%")
+        # logger.info(f"Cloud % AFTER: {after_cloud_pct_val:.2f}%")
 
         # Calcular RBR (temporal)
         delta_nbr = before_mosaic.select('NBR').subtract(after_mosaic.select('NBR')).rename('DeltaNBR')
@@ -188,25 +193,3 @@ class AssessmentRunner:
             "rbr": rbr
         }
 
-# Main execution block
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-    try:
-        gee_client = GEEClient()
-        logger.info("GEE Initialization complete")
-
-        geojson_path = os.path.join("polygons", "eejatai.geojson")
-        roi = GeometryLoader.load_geojson(geojson_path)
-
-        runner = AssessmentRunner(gee_client, roi)
-        result = runner.run_analysis("2025-01-01", "2025-01-01")
-        #result = runner.run_analysis("2024-09-01", "2024-11-08")
-
-        # Exportar mosaicos com bandas adicionais
-        #runner.save_mosaic_local(result["before"]["mosaic"], "before_mosaic_with_indices.tif", scale=10)
-        #runner.save_mosaic_local(result["after"]["mosaic"], "after_mosaic_with_indices.tif", scale=10)
-        runner.save_mosaic_local(result["rbr"], "RBR.tif", scale=10)
-
-    except Exception as e:
-        logger.exception("Unexpected error during processing")
