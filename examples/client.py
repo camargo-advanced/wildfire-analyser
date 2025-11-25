@@ -1,9 +1,8 @@
 # client.py
-
 import logging
 import os
 
-from wildfire_analyser import PostFireAssessment
+from wildfire_analyser import PostFireAssessment, Deliverable
 
 logger = logging.getLogger(__name__)
 
@@ -23,24 +22,28 @@ def main():
         # Initialize the wildfire assessment processor with date range
         runner = PostFireAssessment(geojson_path, "2024-09-01", "2024-11-08", 
                                     deliverables=[
-                                        #"rgb_pre_fire",
-                                        #"rgb_post_fire",
-                                        "ndvi_pre_fire",
-                                        "ndvi_post_fire",
+                                        #Deliverable.RGB_PRE_FIRE,
+                                        #Deliverable.RGB_POST_FIRE,
+                                        #Deliverable.NDVI_PRE_FIRE,
+                                        #Deliverable.NDVI_POST_FIRE,
+                                        Deliverable.RBR
                                     ])
 
         # Run the analysis, which returns a dictionary with binary GeoTIFFs
         result = runner.run_analysis()
         logger.info("run_analysis() complete")
 
-        # Save each output (RBR, BEFORE, AFTER) to local files
-        # The loop avoids duplicated code and makes it easier to add more outputs later
-        for key, item in result.items():
-            # item["filename"] contains the file name
-            # item["data"] contains the binary GeoTIFF bytes
+        # Save each deliverable to local files
+        for key, item in result["images"].items():
             with open(item["filename"], "wb") as f:
                 f.write(item["data"])
             logger.info(f"Saved file: {item['filename']}")
+
+        # Timings
+        timings = result.get("timings", {})
+        logger.info("Stats:")
+        for key, value in timings.items():
+            logger.info(f" → {key}: {value:.2f} sec")
 
         logger.info("Client ends")
 

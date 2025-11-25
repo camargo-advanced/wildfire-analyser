@@ -4,6 +4,8 @@ import requests
 from datetime import datetime, timedelta
 import ee
 from rasterio.io import MemoryFile
+from enum import Enum
+import time
 
 from wildfire_analyser.fire_assessment.gee_client import GEEClient
 from wildfire_analyser.fire_assessment.geometry_loader import GeometryLoader
@@ -14,25 +16,42 @@ DAYS_BEFORE_AFTER = 30
 CLOUD_THRESHOLD = 100
 COLLECTION_ID = "COPERNICUS/S2_SR_HARMONIZED"
 
-
+class Deliverable(Enum):
+    RGB_PRE_FIRE = "rgb_pre_fire"
+    RGB_POST_FIRE = "rgb_post_fire"
+    NDVI_PRE_FIRE = "ndvi_pre_fire"
+    NDVI_POST_FIRE = "ndvi_post_fire"
+    RBR = "rbr"
+    
 class PostFireAssessment:
     def __init__(self, geojson_path: str, start_date: str, end_date: str, deliverables=None):
         """
-        Receives an initialized GEEClient and a Region of Interest (ROI).
+        Receives a Region of Interest (ROI).
         """
         self.gee = GEEClient().ee
-        logger.info("Connected to GEE")
+        logger.info("Successfully connected to GEE")
         self.roi = GeometryLoader.load_geojson(geojson_path)
         self.start_date = start_date
         self.end_date = end_date
-        self.deliverables = deliverables or []
+        
+        # Se o cliente não passar nada → pega todos os deliverables automaticamente
+        if deliverables is None:
+            self.deliverables = list(Deliverable)
+        else:
+            # Verifica se todos são Deliverable
+            invalid = [d for d in deliverables if not isinstance(d, Deliverable)]
+            if invalid:
+                raise ValueError(f"Invalid deliverables: {invalid}")
+
+            self.deliverables = deliverables
+        
         # Registro de todos os tipos de imagens possíveis
         self._deliverable_registry = {
-            "rgb_pre_fire": self._generate_rgb_pre_fire,
-            "rgb_post_fire": self._generate_rgb_post_fire,
-            "ndvi_pre_fire": self._generate_ndvi_pre_fire,
-            "ndvi_post_fire": self._generate_ndvi_post_fire,
-            # futuro: "nbr_pre_fire", "severity_map", etc...
+            Deliverable.RGB_PRE_FIRE: self._generate_rgb_pre_fire,
+            Deliverable.RGB_POST_FIRE: self._generate_rgb_post_fire,
+            Deliverable.NDVI_PRE_FIRE: self._generate_ndvi_pre_fire,
+            Deliverable.NDVI_POST_FIRE: self._generate_ndvi_post_fire,
+            Deliverable.RBR: self._generate_rbr,
         }
 
     def _download_geotiff_bytes(self, image: ee.Image, scale: int = 10):
@@ -42,7 +61,7 @@ class PostFireAssessment:
             "format": "GEO_TIFF"
         })
 
-        response = requests.get(url)
+        response = requests.get(url, stream=True)
         response.raise_for_status()
 
         return response.content  # ← binário TIFF
@@ -78,14 +97,14 @@ class PostFireAssessment:
 
         return collection
 
-    def _ensure_not_empty(self, collection, label, start, end):
+    def _ensure_not_empty(self, collection, start, end):
         try:
             size_val = collection.size().getInfo()
         except Exception:
             size_val = 0
 
         if size_val == 0:
-            raise ValueError(f"No images found for {label}: {start} → {end}")
+            raise ValueError(f"No images found in date range {start} → {end}")
         
     def _download_single_band(self, image, band_name):
         single_band = image.select([band_name])
@@ -106,10 +125,10 @@ class PostFireAssessment:
             return mem_out.read()
 
     def _generate_rgb_pre_fire(self, mosaic):
-        return self._generate_rgb(mosaic, "rgb_pre_fire.tif")
+        return self._generate_rgb(mosaic, Deliverable.RGB_PRE_FIRE.value)
 
     def _generate_rgb_post_fire(self, mosaic):
-        return self._generate_rgb(mosaic, "rgb_post_fire.tif")
+        return self._generate_rgb(mosaic, Deliverable.RGB_POST_FIRE.value)
 
     def _generate_rgb(self, mosaic, filename_prefix):
         """
@@ -136,7 +155,7 @@ class PostFireAssessment:
         rgb_bytes = self._merge_bands([b4, b3, b2])
 
         return {
-            "filename": f"{filename_prefix}_index.tif",
+            "filename": f"{filename_prefix}.tif", 
             "content_type": "image/tiff",
             "data": rgb_bytes
         }
@@ -145,7 +164,7 @@ class PostFireAssessment:
         img = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
         data = self._download_single_band(img, 'ndvi')
         return {
-            "filename": "ndvi_pre_fire.tif",
+            "filename": f"{Deliverable.NDVI_PRE_FIRE.value}.tif",
             "content_type": "image/tiff",
             "data": data
         }
@@ -154,71 +173,87 @@ class PostFireAssessment:
         img = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
         data = self._download_single_band(img, 'ndvi')
         return {
-            "filename": "ndvi_post_fire.tif",
+            "filename": f"{Deliverable.NDVI_POST_FIRE.value}.tif",
             "content_type": "image/tiff",
             "data": data
         }
 
-    def run_analysis(self):
-        before_start, before_end, after_start, after_end = self._expand_dates(self.start_date, self.end_date)
+    def _generate_rbr(self, rbr_img):
+        data = self._download_single_band(rbr_img, 'rbr')
+        return {
+            "filename": "rbr.tif",
+            "content_type": "image/tiff",
+            "data": data
+        }
 
-        # Carrega a coleção completa apenas uma vez
-        full_collection = self._load_full_collection()
-        logger.info("Satellite collection loaded")
+    def _build_mosaic_with_indexes(self, collection):
+        """
+        Recebe uma coleção filtrada → gera mosaic → calcula NDVI, NBR → devolve mosaic com bandas extras.
+        """
+        mosaic = collection.mosaic()
+        ndvi = mosaic.normalizedDifference(["B8_refl", "B4_refl"]).rename("ndvi")
+        nbr  = mosaic.normalizedDifference(["B8_refl", "B12_refl"]).rename("nbr")
+        return mosaic.addBands([ndvi, nbr])
 
-        # --- BEFORE mosaic ---
-        before_col = full_collection.filterDate(before_start, before_end)
-        self._ensure_not_empty(before_col, "BEFORE period", before_start, before_end)
-
-        before_mosaic = before_col.mosaic()
-        before_ndvi = before_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
-        before_nbr = before_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('nbr')
-        before_mosaic = before_mosaic.addBands([before_ndvi, before_nbr])
-
-        logger.info("All indexes calculated for pre-fire date")
-
-        # --- AFTER mosaic ---
-        after_col = full_collection.filterDate(after_start, after_end)
-        self._ensure_not_empty(after_col, "AFTER period", after_start, after_end)
-
-        after_mosaic = after_col.mosaic()
-        after_ndvi = after_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
-        after_nbr = after_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('nbr')
-        after_mosaic = after_mosaic.addBands([after_ndvi, after_nbr])
-
-        # Calcular RBR (temporal)
+    def _compute_rbr(self, before_mosaic, after_mosaic):
+        """
+        Computes RBR (Relative Burn Ratio) from BEFORE and AFTER mosaics.
+        Assumes both mosaics already include band 'nbr'.
+        """
         delta_nbr = before_mosaic.select('nbr').subtract(after_mosaic.select('nbr')).rename('dnbr')
         rbr = delta_nbr.divide(before_mosaic.select('nbr').add(1.001)).rename('rbr')
+        return rbr
 
-        logger.info("All remaining indexes calculated")
+    def run_analysis(self):
+        timings = {}
 
-        # Gerar binários
-        results = {}
+        # Carrega a coleção completa apenas uma vez
+        t0 = time.time()
+        full_collection = self._load_full_collection()
+        timings["collection"] = time.time() - t0
+        logger.info(f"Satellite collection loaded in {timings['collection']:.2f} sec")
 
-        # Rodar SOMENTE os deliverables pedidos
+        before_start, before_end, after_start, after_end = self._expand_dates(
+            self.start_date, self.end_date
+        )
+
+        # BEFORE
+        t1 = time.time()
+        before_collection = full_collection.filterDate(before_start, before_end)
+        self._ensure_not_empty(before_collection, before_start, before_end)
+        before_mosaic = self._build_mosaic_with_indexes(before_collection)
+
+        # AFTER
+        after_collection = full_collection.filterDate(after_start, after_end)
+        self._ensure_not_empty(after_collection, after_start, after_end)
+        after_mosaic = self._build_mosaic_with_indexes(after_collection)
+
+        # Compute RBR
+        rbr = self._compute_rbr(before_mosaic, after_mosaic)
+
+        timings["indexes"] = time.time() - t1
+        logger.info(f"Indexes calculated in {timings['indexes']:.2f} sec")
+
+        # Download dos binários
+        t2 = time.time()
+        images = {} 
+        
         for d in self.deliverables:
             gen_fn = self._deliverable_registry.get(d)
-            if not gen_fn:
-                logger.warning(f"Unknown deliverable requested: {d}")
+            
+            if d == Deliverable.RBR:
+                images[d.value] = gen_fn(rbr)
                 continue
 
-            if "pre" in d:
-                results[d] = gen_fn(before_mosaic)
+            if "pre" in d.value:
+                images[d.value] = gen_fn(before_mosaic)
             else:
-                results[d] = gen_fn(after_mosaic)
+                images[d.value] = gen_fn(after_mosaic)
+        timings["download"] = time.time() - t2
+        logger.info(f"Download completed in {timings['download']:.2f} sec")
 
-        logger.info("Binary data downloaded")
-
-        return results
-
-        # rgb_pre_fire = self._generate_rgb_pre_fire(before_mosaic)
-        # rgb_post_fire = self._generate_rgb_post_fire(after_mosaic)
-
-        # logger.info("Binary data downloaded")
-
-        # return {
-        #     "rgb_pre_fire": rgb_pre_fire,
-        #     "rgb_post_fire": rgb_post_fire
-        # }
-
+        return {
+            "images": images,
+            "timings": timings
+        }
 

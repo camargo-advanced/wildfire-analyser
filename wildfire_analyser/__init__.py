@@ -1,3 +1,3 @@
-from .fire_assessment.post_fire_assessment import PostFireAssessment
+from .fire_assessment.post_fire_assessment import PostFireAssessment, Deliverable
 
-__all__ = ["PostFireAssessment"]
+__all__ = ["PostFireAssessment", "Deliverable"]
