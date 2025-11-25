@@ -26,12 +26,27 @@ def main():
                                         #Deliverable.RGB_POST_FIRE,
                                         #Deliverable.NDVI_PRE_FIRE,
                                         #Deliverable.NDVI_POST_FIRE,
-                                        Deliverable.RBR
+                                        #Deliverable.RBR
                                     ])
 
         # Run the analysis, which returns a dictionary with binary GeoTIFFs
         result = runner.run_analysis()
 
+        # Inserir aqui a impressão da severidade
+        if result.get("area_by_severity"):
+            logger.info("Area by severity (hectares):")
+            severity_labels = {
+                0: "Unburned",
+                1: "Low",
+                2: "Moderate",
+                3: "High",
+                4: "Very High"
+            }
+            for cls, area in result["area_by_severity"].items():
+                logger.info(f" → {severity_labels.get(cls, cls)}: {area:.2f} ha")
+        else:
+            logger.info("Nenhuma informação de severidade retornada.")
+            
         # Save each deliverable to local files
         for key, item in result["images"].items():
             with open(item["filename"], "wb") as f:

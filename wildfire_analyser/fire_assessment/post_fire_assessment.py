@@ -203,6 +203,56 @@ class PostFireAssessment:
         rbr = delta_nbr.divide(before_mosaic.select('nbr').add(1.001)).rename('rbr')
         return rbr
 
+    def _compute_area_by_severity(self, severity_img):
+        """
+        Calcula a área por classe (hectares) dentro da ROI de forma otimizada.
+        """
+        # 1 pixel Sentinel-2 = 10 m → pixel area = 100 m² = 0.01 ha
+        pixel_area_ha = ee.Image.pixelArea().divide(10000)
+
+        # Cria uma imagem com 'severity' como máscara para cada classe
+        def area_per_class(c):
+            mask = severity_img.eq(c)
+            return pixel_area_ha.updateMask(mask).rename('area_' + str(c))
+        
+        class_images = [area_per_class(c) for c in range(5)]
+        stacked = ee.Image.cat(class_images)
+
+        # Reduz todas as bandas ao mesmo tempo
+        areas = stacked.reduceRegion(
+            reducer=ee.Reducer.sum(),
+            geometry=self.roi,
+            scale=10,
+            maxPixels=1e12
+        ).getInfo()
+
+        # Retorna no mesmo formato {0: hectares, 1: hectares, ...}
+        return {c: areas.get('area_' + str(c), 0) for c in range(5)}
+
+
+    def _classify_rbr_severity(self, rbr_img):
+        """
+        Classifica o RBR em classes de severidade.
+        Classes típicas:
+            0 = Unburned        (RBR < 0.1)
+            1 = Low             (0.1 ≤ RBR < 0.27)
+            2 = Moderate        (0.27 ≤ RBR < 0.44)
+            3 = High            (0.44 ≤ RBR < 0.66)
+            4 = Very High       (RBR ≥ 0.66)
+        """
+
+        severity = rbr_img.expression(
+            """
+            (b('rbr') < 0.10) ? 0 :
+            (b('rbr') < 0.27) ? 1 :
+            (b('rbr') < 0.44) ? 2 :
+            (b('rbr') < 0.66) ? 3 :
+                                4
+            """
+        ).rename("severity")
+
+        return severity
+
     def run_analysis(self):
         timings = {}
 
@@ -228,7 +278,10 @@ class PostFireAssessment:
 
         # Compute RBR
         rbr = self._compute_rbr(before_mosaic, after_mosaic)
-
+        
+        # Classificar e Calcular áreas por severidade
+        severity = self._classify_rbr_severity(rbr)
+        area_stats = self._compute_area_by_severity(severity)
         timings["Indexes calculated"] = time.time() - t1
 
         # Download dos binários
@@ -250,6 +303,8 @@ class PostFireAssessment:
 
         return {
             "images": images,
-            "timings": timings
+            "timings": timings,
+            "area_by_severity": area_stats
+
         }
 
