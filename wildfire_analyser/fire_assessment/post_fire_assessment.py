@@ -1,8 +1,9 @@
 # post_fire_assessment.py
 import logging
+import requests
 from datetime import datetime, timedelta
 import ee
-import os
+from rasterio.io import MemoryFile
 
 from wildfire_analyser.fire_assessment.gee_client import GEEClient
 from wildfire_analyser.fire_assessment.geometry_loader import GeometryLoader
@@ -19,11 +20,24 @@ class PostFireAssessment:
         """
         Receives an initialized GEEClient and a Region of Interest (ROI).
         """
-        self.gee_client = GEEClient()
-        self.gee = self.gee_client.ee
+        self.gee = GEEClient().ee
+        logger.info("Connected to GEE")
         self.roi = GeometryLoader.load_geojson(geojson_path)
         self.start_date = start_date
+
         self.end_date = end_date
+
+    def _download_geotiff_bytes(self, image: ee.Image, scale: int = 10):
+        url = image.getDownloadURL({
+            "scale": scale,
+            "region": self.roi,
+            "format": "GEO_TIFF"
+        })
+
+        response = requests.get(url)
+        response.raise_for_status()
+
+        return response.content  # ← binário TIFF
 
     def _expand_dates(self, start_date: str, end_date: str):
         sd = datetime.strptime(start_date, "%Y-%m-%d")
@@ -49,78 +63,12 @@ class PostFireAssessment:
             refl_bands = img.select('B.*').multiply(0.0001)
             refl_names = refl_bands.bandNames().map(lambda b: ee.String(b).cat('_refl'))
             img = img.addBands(refl_bands.rename(refl_names))
-            
-            # qa = img.select('QA60')
-            # cloud_mask = qa.bitwiseAnd(1 << 10).eq(0).And(qa.bitwiseAnd(1 << 11).eq(0))
-            # return img.updateMask(cloud_mask)
 
             return img
         
         collection = collection.map(preprocess)
 
-        # Debug: listar bandas da primeira imagem usando getInfo apenas para este debug
-        # try:
-        #     first_image = ee.Image(collection.first())
-        #     band_names = first_image.bandNames().getInfo()  # apenas para debug
-        #     logger.info(f"Bands in first image: {band_names}")
-        # except Exception as e:
-        #     logger.warning(f"Unable to fetch band names for debug: {e}")
-
         return collection
-
-    def add_indices(mosaic: ee.Image):
-        """Adiciona NDVI e NBR como bandas na imagem."""
-        ndvi = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('NDVI')
-        nbr = mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('NBR')
-        return mosaic.addBands([ndvi, nbr])
-
-    def calculate_rbr(pre_mosaic: ee.Image, post_mosaic: ee.Image):
-        """Calcula RBR a partir dos mosaicos antes e depois."""
-        pre_nbr = pre_mosaic.select('NBR')
-        post_nbr = post_mosaic.select('NBR')
-        delta_nbr = pre_nbr.subtract(post_nbr).rename('DeltaNBR')
-        rbr = delta_nbr.divide(pre_nbr.add(1.001)).rename('RBR')
-        return rbr
-
-    def save_mosaic_local(self, mosaic: ee.Image, filename: str, scale: int = 20):
-        """
-        Salva o mosaico como GeoTIFF local diretamente do Earth Engine para o disco.
-        """
-        import geemap
-        
-        abs_path = os.path.abspath(filename)
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-
-        # logger.info(f"Downloading mosaic to {abs_path} with scale {scale}m ...")
-        
-        geemap.download_ee_image(
-            image=mosaic.clip(self.roi),
-            filename=abs_path,
-            scale=scale,
-            region=self.roi,
-            overwrite=True,       # sobrescreve se já existir
-            max_requests=5,       # limita requisições simultâneas
-            max_cpus=2            # limita threads locais
-        )
-
-        # logger.info(f"Mosaic saved at {abs_path}")
-
-    def get_cloud_percentage(self, mosaic: ee.Image):
-        qa = mosaic.select('QA60')
-        
-        cloud_mask = (
-            qa.bitwiseAnd(1 << 10).gt(0)
-            .Or(qa.bitwiseAnd(1 << 11).gt(0))
-        )
-
-        cloud_mean = cloud_mask.reduceRegion(
-            reducer=ee.Reducer.mean(),
-            geometry=self.roi,
-            scale=20,
-            maxPixels=1e12
-        ).get('QA60')
-
-        return ee.Number(cloud_mean).multiply(100)
 
     def _ensure_not_empty(self, collection, label, start, end):
         try:
@@ -131,65 +79,110 @@ class PostFireAssessment:
         if size_val == 0:
             raise ValueError(f"No images found for {label}: {start} → {end}")
         
+    def _download_single_band(self, image, band_name):
+        single_band = image.select([band_name])
+        return self._download_geotiff_bytes(single_band)
+
+    def _merge_bands(self, band_bytes_list):
+        memfiles = [MemoryFile(b) for b in band_bytes_list]
+        datasets = [m.open() for m in memfiles]
+
+        profile = datasets[0].profile
+        profile.update(count=len(datasets))
+
+        with MemoryFile() as mem_out:
+            with mem_out.open(**profile) as dst:
+                for idx, ds in enumerate(datasets, start=1):
+                    dst.write(ds.read(1), idx)
+
+            return mem_out.read()
+
+    def _generate_rgb_pre_fire(self, before_mosaic):
+        """Gera RGB (B4,B3,B2) como um único GeoTIFF multibanda."""
+        rgb_image = before_mosaic.select([
+            'B4_refl',  # Red
+            'B3_refl',  # Green
+            'B2_refl'   # Blue
+        ])
+
+        # Baixa cada banda separadamente
+        b4 = self._download_single_band(rgb_image, 'B4_refl')
+        b3 = self._download_single_band(rgb_image, 'B3_refl')
+        b2 = self._download_single_band(rgb_image, 'B2_refl')
+
+        # Junta num único TIFF multibanda
+        rgb_bytes = self._merge_bands([b4, b3, b2])
+
+        return {
+            "filename": "rgb_pre_fire_index.tif",
+            "content_type": "image/tiff",
+            "data": rgb_bytes
+        }
+
+    def _generate_rgb_post_fire(self, after_mosaic):
+        """Gera RGB pós-fogo (B4,B3,B2) como um único GeoTIFF multibanda."""
+        rgb_image = after_mosaic.select([
+            'B4_refl',  # Red
+            'B3_refl',  # Green
+            'B2_refl'   # Blue
+        ])
+
+        # Baixa cada banda separadamente
+        b4 = self._download_single_band(rgb_image, 'B4_refl')
+        b3 = self._download_single_band(rgb_image, 'B3_refl')
+        b2 = self._download_single_band(rgb_image, 'B2_refl')
+
+        # Junta num único TIFF multibanda
+        rgb_bytes = self._merge_bands([b4, b3, b2])
+
+        return {
+            "filename": "rgb_post_fire_index.tif",
+            "content_type": "image/tiff",
+            "data": rgb_bytes
+        }
+
     def run_analysis(self):
         before_start, before_end, after_start, after_end = self._expand_dates(self.start_date, self.end_date)
 
         # Carrega a coleção completa apenas uma vez
         full_collection = self._load_full_collection()
+        logger.info("Satellite collection loaded")
 
         # --- BEFORE mosaic ---
         before_col = full_collection.filterDate(before_start, before_end)
         self._ensure_not_empty(before_col, "BEFORE period", before_start, before_end)
-
-        # Debug: IDs das imagens BEFORE
-        # try:
-        #     before_ids = before_col.aggregate_array('system:id').getInfo()
-        #     logger.info(f"Images used for BEFORE mosaic ({before_start} → {before_end}): {before_ids}")
-        # except Exception as e:
-        #     logger.warning(f"Couldn't fetch BEFORE image IDs: {e}")
 
         before_mosaic = before_col.mosaic()
         before_ndvi = before_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('NDVI')
         before_nbr = before_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('NBR')
         before_mosaic = before_mosaic.addBands([before_ndvi, before_nbr])
 
+        logger.info("All indexes calculated for pre-fire date.")
+
         # --- AFTER mosaic ---
         after_col = full_collection.filterDate(after_start, after_end)
         self._ensure_not_empty(after_col, "AFTER period", after_start, after_end)
-
-        # Debug: IDs das imagens AFTER
-        # try:
-        #     after_ids = after_col.aggregate_array('system:id').getInfo()
-        #     logger.info(f"Images used for AFTER mosaic ({after_start} → {after_end}): {after_ids}")
-        # except Exception as e:
-        #     logger.warning(f"Couldn't fetch AFTER image IDs: {e}")
 
         after_mosaic = after_col.mosaic()
         after_ndvi = after_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('NDVI')
         after_nbr = after_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('NBR')
         after_mosaic = after_mosaic.addBands([after_ndvi, after_nbr])
 
-        # Calcula percentual de nuvens (EE Number)
-        # before_cloud_pct = self.get_cloud_percentage(before_mosaic)
-        # after_cloud_pct = self.get_cloud_percentage(after_mosaic)
-
-        # Converte para número Python
-        before_cloud_pct_val = 0
-        after_cloud_pct_val = 0
-        # before_cloud_pct_val = before_cloud_pct.getInfo()
-        # after_cloud_pct_val = after_cloud_pct.getInfo()
-
-        # Log com duas casas decimais
-        # logger.info(f"Cloud % BEFORE: {before_cloud_pct_val:.2f}%")
-        # logger.info(f"Cloud % AFTER: {after_cloud_pct_val:.2f}%")
-
         # Calcular RBR (temporal)
         delta_nbr = before_mosaic.select('NBR').subtract(after_mosaic.select('NBR')).rename('DeltaNBR')
         rbr = delta_nbr.divide(before_mosaic.select('NBR').add(1.001)).rename('RBR')
 
+        logger.info("All remaining indexes calculated.")
+
+        # Gerar binários
+        rgb_pre_fire = self._generate_rgb_pre_fire(before_mosaic)
+        rgb_post_fire = self._generate_rgb_post_fire(after_mosaic)
+
+        logger.info("Binary data downloaded.")
+
         return {
-            "before": {"mosaic": before_mosaic, "cloud_percent": before_cloud_pct_val},
-            "after": {"mosaic": after_mosaic, "cloud_percent": after_cloud_pct_val},
-            "rbr": rbr
+            "rgb_pre_fire": rgb_pre_fire,
+            "rgb_post_fire": rgb_post_fire
         }
+
 
