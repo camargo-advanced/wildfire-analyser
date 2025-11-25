@@ -16,7 +16,7 @@ COLLECTION_ID = "COPERNICUS/S2_SR_HARMONIZED"
 
 
 class PostFireAssessment:
-    def __init__(self, geojson_path: str, start_date: str, end_date: str):
+    def __init__(self, geojson_path: str, start_date: str, end_date: str, deliverables=None):
         """
         Receives an initialized GEEClient and a Region of Interest (ROI).
         """
@@ -24,8 +24,16 @@ class PostFireAssessment:
         logger.info("Connected to GEE")
         self.roi = GeometryLoader.load_geojson(geojson_path)
         self.start_date = start_date
-
         self.end_date = end_date
+        self.deliverables = deliverables or []
+        # Registro de todos os tipos de imagens possíveis
+        self._deliverable_registry = {
+            "rgb_pre_fire": self._generate_rgb_pre_fire,
+            "rgb_post_fire": self._generate_rgb_post_fire,
+            "ndvi_pre_fire": self._generate_ndvi_pre_fire,
+            "ndvi_post_fire": self._generate_ndvi_post_fire,
+            # futuro: "nbr_pre_fire", "severity_map", etc...
+        }
 
     def _download_geotiff_bytes(self, image: ee.Image, scale: int = 10):
         url = image.getDownloadURL({
@@ -97,9 +105,23 @@ class PostFireAssessment:
 
             return mem_out.read()
 
-    def _generate_rgb_pre_fire(self, before_mosaic):
-        """Gera RGB (B4,B3,B2) como um único GeoTIFF multibanda."""
-        rgb_image = before_mosaic.select([
+    def _generate_rgb_pre_fire(self, mosaic):
+        return self._generate_rgb(mosaic, "rgb_pre_fire.tif")
+
+    def _generate_rgb_post_fire(self, mosaic):
+        return self._generate_rgb(mosaic, "rgb_post_fire.tif")
+
+    def _generate_rgb(self, mosaic, filename_prefix):
+        """
+        Gera um RGB (B4,B3,B2) como um único GeoTIFF multibanda.
+        Pode ser usado tanto para PRE FIRE quanto POST FIRE.
+        
+        Params:
+            mosaic: ee.Image mosaic (antes ou depois)
+            filename_prefix: string sem extensão (ex: "rgb_pre_fire" ou "rgb_post_fire")
+        """
+        
+        rgb_image = mosaic.select([
             'B4_refl',  # Red
             'B3_refl',  # Green
             'B2_refl'   # Blue
@@ -114,31 +136,27 @@ class PostFireAssessment:
         rgb_bytes = self._merge_bands([b4, b3, b2])
 
         return {
-            "filename": "rgb_pre_fire_index.tif",
+            "filename": f"{filename_prefix}_index.tif",
             "content_type": "image/tiff",
             "data": rgb_bytes
         }
 
-    def _generate_rgb_post_fire(self, after_mosaic):
-        """Gera RGB pós-fogo (B4,B3,B2) como um único GeoTIFF multibanda."""
-        rgb_image = after_mosaic.select([
-            'B4_refl',  # Red
-            'B3_refl',  # Green
-            'B2_refl'   # Blue
-        ])
-
-        # Baixa cada banda separadamente
-        b4 = self._download_single_band(rgb_image, 'B4_refl')
-        b3 = self._download_single_band(rgb_image, 'B3_refl')
-        b2 = self._download_single_band(rgb_image, 'B2_refl')
-
-        # Junta num único TIFF multibanda
-        rgb_bytes = self._merge_bands([b4, b3, b2])
-
+    def _generate_ndvi_pre_fire(self, mosaic):
+        img = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
+        data = self._download_single_band(img, 'ndvi')
         return {
-            "filename": "rgb_post_fire_index.tif",
+            "filename": "ndvi_pre_fire.tif",
             "content_type": "image/tiff",
-            "data": rgb_bytes
+            "data": data
+        }
+
+    def _generate_ndvi_post_fire(self, mosaic):
+        img = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
+        data = self._download_single_band(img, 'ndvi')
+        return {
+            "filename": "ndvi_post_fire.tif",
+            "content_type": "image/tiff",
+            "data": data
         }
 
     def run_analysis(self):
@@ -153,36 +171,54 @@ class PostFireAssessment:
         self._ensure_not_empty(before_col, "BEFORE period", before_start, before_end)
 
         before_mosaic = before_col.mosaic()
-        before_ndvi = before_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('NDVI')
-        before_nbr = before_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('NBR')
+        before_ndvi = before_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
+        before_nbr = before_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('nbr')
         before_mosaic = before_mosaic.addBands([before_ndvi, before_nbr])
 
-        logger.info("All indexes calculated for pre-fire date.")
+        logger.info("All indexes calculated for pre-fire date")
 
         # --- AFTER mosaic ---
         after_col = full_collection.filterDate(after_start, after_end)
         self._ensure_not_empty(after_col, "AFTER period", after_start, after_end)
 
         after_mosaic = after_col.mosaic()
-        after_ndvi = after_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('NDVI')
-        after_nbr = after_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('NBR')
+        after_ndvi = after_mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
+        after_nbr = after_mosaic.normalizedDifference(['B8_refl', 'B12_refl']).rename('nbr')
         after_mosaic = after_mosaic.addBands([after_ndvi, after_nbr])
 
         # Calcular RBR (temporal)
-        delta_nbr = before_mosaic.select('NBR').subtract(after_mosaic.select('NBR')).rename('DeltaNBR')
-        rbr = delta_nbr.divide(before_mosaic.select('NBR').add(1.001)).rename('RBR')
+        delta_nbr = before_mosaic.select('nbr').subtract(after_mosaic.select('nbr')).rename('dnbr')
+        rbr = delta_nbr.divide(before_mosaic.select('nbr').add(1.001)).rename('rbr')
 
-        logger.info("All remaining indexes calculated.")
+        logger.info("All remaining indexes calculated")
 
         # Gerar binários
-        rgb_pre_fire = self._generate_rgb_pre_fire(before_mosaic)
-        rgb_post_fire = self._generate_rgb_post_fire(after_mosaic)
+        results = {}
 
-        logger.info("Binary data downloaded.")
+        # Rodar SOMENTE os deliverables pedidos
+        for d in self.deliverables:
+            gen_fn = self._deliverable_registry.get(d)
+            if not gen_fn:
+                logger.warning(f"Unknown deliverable requested: {d}")
+                continue
 
-        return {
-            "rgb_pre_fire": rgb_pre_fire,
-            "rgb_post_fire": rgb_post_fire
-        }
+            if "pre" in d:
+                results[d] = gen_fn(before_mosaic)
+            else:
+                results[d] = gen_fn(after_mosaic)
+
+        logger.info("Binary data downloaded")
+
+        return results
+
+        # rgb_pre_fire = self._generate_rgb_pre_fire(before_mosaic)
+        # rgb_post_fire = self._generate_rgb_post_fire(after_mosaic)
+
+        # logger.info("Binary data downloaded")
+
+        # return {
+        #     "rgb_pre_fire": rgb_pre_fire,
+        #     "rgb_post_fire": rgb_post_fire
+        # }
 
 

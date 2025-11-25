@@ -14,14 +14,20 @@ def main():
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s"
     )
-    logger.info("Program starts")
+    logger.info("Client starts")
 
     try:
         # Path to the GeoJSON polygon used as the Region of Interest (ROI)
         geojson_path = os.path.join("polygons", "eejatai.geojson")
 
         # Initialize the wildfire assessment processor with date range
-        runner = PostFireAssessment(geojson_path, "2024-09-01", "2024-11-08")
+        runner = PostFireAssessment(geojson_path, "2024-09-01", "2024-11-08", 
+                                    deliverables=[
+                                        #"rgb_pre_fire",
+                                        #"rgb_post_fire",
+                                        "ndvi_pre_fire",
+                                        "ndvi_post_fire",
+                                    ])
 
         # Run the analysis, which returns a dictionary with binary GeoTIFFs
         result = runner.run_analysis()
@@ -36,7 +42,7 @@ def main():
                 f.write(item["data"])
             logger.info(f"Saved file: {item['filename']}")
 
-        logger.info("Program complete.")
+        logger.info("Client ends")
 
     except Exception as e:
         logger.exception("Unexpected error during processing")
