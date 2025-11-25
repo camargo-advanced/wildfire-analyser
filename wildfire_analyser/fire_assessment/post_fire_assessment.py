@@ -29,7 +29,6 @@ class PostFireAssessment:
         Receives a Region of Interest (ROI).
         """
         self.gee = GEEClient().ee
-        logger.info("Successfully connected to GEE")
         self.roi = GeometryLoader.load_geojson(geojson_path)
         self.start_date = start_date
         self.end_date = end_date
@@ -210,8 +209,7 @@ class PostFireAssessment:
         # Carrega a coleção completa apenas uma vez
         t0 = time.time()
         full_collection = self._load_full_collection()
-        timings["collection"] = time.time() - t0
-        logger.info(f"Satellite collection loaded in {timings['collection']:.2f} sec")
+        timings["Sat collection loaded"] = time.time() - t0
 
         before_start, before_end, after_start, after_end = self._expand_dates(
             self.start_date, self.end_date
@@ -231,8 +229,7 @@ class PostFireAssessment:
         # Compute RBR
         rbr = self._compute_rbr(before_mosaic, after_mosaic)
 
-        timings["indexes"] = time.time() - t1
-        logger.info(f"Indexes calculated in {timings['indexes']:.2f} sec")
+        timings["Indexes calculated"] = time.time() - t1
 
         # Download dos binários
         t2 = time.time()
@@ -249,8 +246,7 @@ class PostFireAssessment:
                 images[d.value] = gen_fn(before_mosaic)
             else:
                 images[d.value] = gen_fn(after_mosaic)
-        timings["download"] = time.time() - t2
-        logger.info(f"Download completed in {timings['download']:.2f} sec")
+        timings["Images downloaded"] = time.time() - t2
 
         return {
             "images": images,

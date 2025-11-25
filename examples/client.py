@@ -31,7 +31,6 @@ def main():
 
         # Run the analysis, which returns a dictionary with binary GeoTIFFs
         result = runner.run_analysis()
-        logger.info("run_analysis() complete")
 
         # Save each deliverable to local files
         for key, item in result["images"].items():
