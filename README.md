@@ -2,27 +2,67 @@
 
 Python project for analyzing wildfires in natural reserves.
 
-## 📦 Installing the wildfire-analyser library
+## Installation and Usage
 
-You can install the library directly from PyPI:
+Follow the steps below to install and test `wildfire-analyser` inside an isolated environment:
 
 ```bash
+mkdir /tmp/test
+cd /tmp/test
+
+python3 -m venv venv
+source venv/bin/activate
+
 pip install wildfire-analyser
 ```
 
-After installation, you can import and use the main classes normally:
+### Required Files Before Running the Client
 
-```python
-from wildfire_analyser import PostFireAssessment, Deliverable, FireSeverity
+Before running the client, you **must** prepare two items:
+
+---
+
+#### **1. Add a GeoJSON polygon**
+
+Create a folder named `polygons` in the project root and place your ROI polygon file inside it:
+
+```
+/tmp/test/
+├── polygons/
+│   └── your_polygon.geojson
+└── venv/
 ```
 
-To use the example client included in the package, run:
+An example GeoJSON file is available in the repository.
+
+---
+
+#### **2. Create the `.env` file with GEE authentication data**
+
+In the project root, add a `.env` file containing your Google Earth Engine authentication variables.
+
+A `.env` template is also available in the GitHub repository.
+
+```
+/tmp/test/
+├── .env
+├── polygons/
+└── venv/
+```
+
+---
+
+### Running the Client
+
+After adding the `.env` file and your GeoJSON polygon:
 
 ```bash
 python3 -m wildfire_analyser.client
 ```
 
-Make sure your environment includes the required credentials (e.g., `.env` file) before running the client.
+This will start the analysis process, generate the configured deliverables, and save the output files in the current directory.
+
+
 
 ## Setup Instructions for Developers
 
