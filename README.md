@@ -2,7 +2,29 @@
 
 Python project for analyzing wildfires in natural reserves.
 
-## Setup Instructions
+## 📦 Installing the wildfire-analyser library
+
+You can install the library directly from PyPI:
+
+```bash
+pip install wildfire-analyser
+```
+
+After installation, you can import and use the main classes normally:
+
+```python
+from wildfire_analyser import PostFireAssessment, Deliverable, FireSeverity
+```
+
+To use the example client included in the package, run:
+
+```bash
+python3 -m wildfire_analyser.client
+```
+
+Make sure your environment includes the required credentials (e.g., `.env` file) before running the client.
+
+## Setup Instructions for Developers
 
 1. **Clone the repository**
 
@@ -36,7 +58,7 @@ pip install -r requirements.txt
 6. **Run the sample client application**
 
 ```bash
-python3 -m examples.client
+python3 -m wildfire_analyser.client
 ```
 
 ## Useful Commands
