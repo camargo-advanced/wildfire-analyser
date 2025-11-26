@@ -46,15 +46,6 @@ class PostFireAssessment:
         # Initialize and Autenticate to GEE
         self.gee = GEEClient().ee
         self.roi = self.load_geojson(geojson_path)
-        
-        # Registro de todos os tipos de imagens possíveis
-        self._deliverable_registry = {
-            Deliverable.RGB_PRE_FIRE: self._generate_rgb_pre_fire,
-            Deliverable.RGB_POST_FIRE: self._generate_rgb_post_fire,
-            Deliverable.NDVI_PRE_FIRE: self._generate_ndvi_pre_fire,
-            Deliverable.NDVI_POST_FIRE: self._generate_ndvi_post_fire,
-            Deliverable.RBR: self._generate_rbr,
-        }
 
     def load_geojson(self, path: str) -> ee.Geometry:
         """Load a GeoJSON file and return an Earth Engine Geometry."""
@@ -125,10 +116,14 @@ class PostFireAssessment:
             raise
         
     def _generate_rgb_pre_fire(self, mosaic):
-        return self._generate_rgb(mosaic, Deliverable.RGB_PRE_FIRE.value)
+        tiff = self._generate_rgb(mosaic, Deliverable.RGB_PRE_FIRE.value)
+        jpeg = self._generate_rgb_visual(mosaic, "rgb_pre_fire_visual")
+        return tiff, jpeg
 
     def _generate_rgb_post_fire(self, mosaic):
-        return self._generate_rgb(mosaic, Deliverable.RGB_POST_FIRE.value)
+        tiff = self._generate_rgb(mosaic, Deliverable.RGB_POST_FIRE.value)
+        jpeg = self._generate_rgb_visual(mosaic, "rgb_post_fire_visual")
+        return tiff, jpeg
 
     def _generate_rgb(self, mosaic, filename_prefix):
         """
@@ -180,23 +175,58 @@ class PostFireAssessment:
             "data": data
         }
 
-    def _generate_rbr(self, rbr_img):
+    def _generate_rbr(self, rbr_img, severity_img):
         """
-        Computes the pure RBR index and downloads it as a single-band GeoTIFF.
-        Returns the result as a deliverable object.
+        Computes RBR and generates deliverables:
+            - rbr.tif (GeoTIFF)
+            - severity_visual.jpg (RBR class color)
+            - rbr_visual.jpg (RBR color JPEG with rbrVis palette)
         """
-        rbr_bytes = download_single_band(
-            rbr_img,
-            'rbr',
-            region=self.roi,
-            scale=10
-        )
+        # RBR GeoTIFF
+        rbr_bytes = download_single_band(rbr_img, 'rbr', region=self.roi, scale=10)
+        tiff_deliverable = {
+            "filename": "rbr.tif",
+            "content_type": "image/tiff",
+            "data": rbr_bytes
+        }
+
+        # Severidade colorida
+        severity_deliverable = self._generate_severity_visual(severity_img)
+
+        # RBR visual JPEG
+        rbr_visual_deliverable = self._generate_rbr_visual(rbr_img)
+
+        return tiff_deliverable, severity_deliverable, rbr_visual_deliverable
+
+    def _generate_rbr_visual(self, rbr_img):
+        """
+        Generates a colorized RBR JPEG using the visualization parameters:
+            min: -0.5
+            max: 0.6
+            palette: ['black','yellow','red']
+        """
+        rbr_vis_params = {
+            "min": -0.5,
+            "max": 0.6,
+            "palette": ["black","yellow","red"]
+        }
+
+        vis = rbr_img.visualize(**rbr_vis_params)
+
+        url = vis.getDownloadURL({
+            "format": "JPEG",
+            "region": self.roi,
+            "scale": 10
+        })
+
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
 
         return {
-                "filename": "rbr.tif",
-                "content_type": "image/tiff",
-                "data": rbr_bytes
-            }
+            "filename": "rbr_visual.jpg",
+            "content_type": "image/jpeg",
+            "data": response.content
+        }
 
     def _generate_severity_visual(self, severity_img):
         """
@@ -228,7 +258,39 @@ class PostFireAssessment:
         response.raise_for_status()
 
         return {
-            "filename": "severity.jpg",
+            "filename": "severity_visual.jpg",
+            "content_type": "image/jpeg",
+            "data": response.content
+        }
+
+    def _generate_rgb_visual(self, mosaic, prefix):
+        """
+        Generates a colorized RGB JPEG for visualization purposes.
+        Uses custom visualization parameters similar to JavaScript GEE.
+        """
+        # Seleciona bandas RGB refletância
+        rgb_img = mosaic.select(['B4_refl', 'B3_refl', 'B2_refl'])
+
+        # Define visualização semelhante ao RBR
+        rgb_vis_params = {
+            "min": 0.0,
+            "max": 0.3,  # ajustável conforme preferir
+        }
+
+        vis = rgb_img.visualize(**rgb_vis_params)
+
+        # Download JPEG
+        url = vis.getDownloadURL({
+            "format": "JPEG",
+            "region": self.roi,
+            "scale": 10
+        })
+
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+
+        return {
+            "filename": f"{prefix}.jpg",
             "content_type": "image/jpeg",
             "data": response.content
         }
@@ -330,26 +392,31 @@ class PostFireAssessment:
         area_stats = self._compute_area_by_severity(severity)
         timings["Indexes calculated"] = time.time() - t1
 
+        deliverable_registry = {
+            Deliverable.RGB_PRE_FIRE: lambda ctx: self._generate_rgb_pre_fire(before_mosaic),
+            Deliverable.RGB_POST_FIRE: lambda ctx: self._generate_rgb_post_fire(after_mosaic),
+            Deliverable.NDVI_PRE_FIRE: lambda ctx: [self._generate_ndvi(before_mosaic, Deliverable.NDVI_PRE_FIRE.value)],
+            Deliverable.NDVI_POST_FIRE: lambda ctx: [self._generate_ndvi(after_mosaic, Deliverable.NDVI_POST_FIRE.value)],
+            Deliverable.RBR: lambda ctx: self._generate_rbr(rbr, severity),
+        }
+
         # Download binaries
         t2 = time.time()
         images = {} 
-        
-        for d in self.deliverables:
-            gen_fn = self._deliverable_registry.get(d)
-                    
-            if d == Deliverable.RBR:
-                rbr_outputs = gen_fn(rbr)
-                for out in rbr_outputs:
-                    images[out["filename"]] = out
 
-                # adiciona a visualização colorida
-                images["severity_visual"] = self._generate_severity_visual(severity)
+        for d in self.deliverables:
+            gen_fn = deliverable_registry.get(d)
+            if not gen_fn:
+                logger.warning(f"No generator for deliverable {d}")
                 continue
 
-            if "pre" in d.value:
-                images[d.value] = gen_fn(before_mosaic)
+            outputs = gen_fn({})
+            if isinstance(outputs, tuple) or isinstance(outputs, list):
+                for out in outputs:
+                    images[out["filename"]] = out
             else:
-                images[d.value] = gen_fn(after_mosaic)
+                images[outputs["filename"]] = outputs
+
         timings["Images downloaded"] = time.time() - t2
 
         return {
