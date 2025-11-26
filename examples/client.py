@@ -22,10 +22,10 @@ def main():
         # Initialize the wildfire assessment processor with date range
         runner = PostFireAssessment(geojson_path, "2024-09-01", "2024-11-08", 
                                     deliverables=[
-                                        Deliverable.RGB_PRE_FIRE,
-                                        Deliverable.RGB_POST_FIRE,
-                                        Deliverable.NDVI_PRE_FIRE,
-                                        Deliverable.NDVI_POST_FIRE,
+                                        #Deliverable.RGB_PRE_FIRE,
+                                        #Deliverable.RGB_POST_FIRE,
+                                        #Deliverable.NDVI_PRE_FIRE,
+                                        #Deliverable.NDVI_POST_FIRE,
                                         Deliverable.RBR,
                                     ])
 
