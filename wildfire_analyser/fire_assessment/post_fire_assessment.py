@@ -212,8 +212,10 @@ class PostFireAssessment:
         }
 
         vis = rbr_img.visualize(**rbr_vis_params)
-
-        url = vis.getDownloadURL({
+        styled = self._styled_roi_overlay().visualize()
+        final = ee.ImageCollection([vis, styled]).mosaic()
+        
+        url = final.getDownloadURL({
             "format": "JPEG",
             "region": self.roi,
             "scale": 10
@@ -246,9 +248,11 @@ class PostFireAssessment:
             max=4,
             palette=palette
         )
+        styled = self._styled_roi_overlay().visualize()
+        final = ee.ImageCollection([vis, styled]).mosaic()
 
         # Download jpeg
-        url = vis.getDownloadURL({
+        url = final.getDownloadURL({
             "format": "JPEG",
             "region": self.roi,
             "scale": 10
@@ -262,6 +266,16 @@ class PostFireAssessment:
             "content_type": "image/jpeg",
             "data": response.content
         }
+
+    def _styled_roi_overlay(self):
+        """Creates a styled overlay of the ROI polygon (purple outline, no fill)."""
+        fc = ee.FeatureCollection([ee.Feature(self.roi)])
+        styled = fc.style(
+            color='#800080',     # purple border
+            fillColor='00000000',  # transparent fill
+            width=3
+        )
+        return styled
 
     def _generate_rgb_visual(self, mosaic, prefix):
         """
@@ -278,9 +292,11 @@ class PostFireAssessment:
         }
 
         vis = rgb_img.visualize(**rgb_vis_params)
+        styled = self._styled_roi_overlay().visualize()
+        final = ee.ImageCollection([vis, styled]).mosaic()
 
         # Download JPEG
-        url = vis.getDownloadURL({
+        url = final.getDownloadURL({
             "format": "JPEG",
             "region": self.roi,
             "scale": 10

@@ -1,0 +1,29 @@
+[project]
+name = "wildfire-analyser"
+version = "0.1.0"
+description = "Python library for post-fire assessment and wildfire analysis using Google Earth Engine."
+authors = [
+    { name = "Marcelo Camargo" }
+]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+
+dependencies = [
+    "geemap==0.36.6",
+    "geopandas==1.1.1",
+    "geedim==2.0.0",
+    "python-dotenv==1.0.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/camargo-advanced/wildfire-analyser"
+Source = "https://github.com/camargo-advanced/wildfire-analyser"
+Issues = "https://github.com/camargo-advanced/wildfire-analyser/issues"
+
+[tool.setuptools.packages.find]
+include = ["wildfire_analyser*"]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
