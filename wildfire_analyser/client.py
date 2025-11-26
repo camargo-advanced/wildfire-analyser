@@ -55,4 +55,5 @@ def main():
         logger.exception("Unexpected error during processing")
 
 # Entry point
-main()
+if __name__ == "__main__":
+    main()
