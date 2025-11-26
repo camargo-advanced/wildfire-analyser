@@ -1,48 +1,49 @@
 # post_fire_assessment.py
 import logging
-import requests
-from datetime import datetime, timedelta
-import ee
-from rasterio.io import MemoryFile
-from enum import Enum
 import time
 
+import ee
+import requests
+
+from wildfire_analyser.fire_assessment.date_utils import expand_dates
 from wildfire_analyser.fire_assessment.gee_client import GEEClient
 from wildfire_analyser.fire_assessment.geometry_loader import GeometryLoader
+from wildfire_analyser.fire_assessment.deliverable import Deliverable
+from wildfire_analyser.fire_assessment.validators import (
+    validate_date,
+    validate_geojson_path,
+    validate_deliverables,
+)
+from wildfire_analyser.fire_assessment.downloaders import (
+    download_single_band,
+    merge_bands,
+)
 
 logger = logging.getLogger(__name__)
 
-DAYS_BEFORE_AFTER = 30
 CLOUD_THRESHOLD = 100
 COLLECTION_ID = "COPERNICUS/S2_SR_HARMONIZED"
-
-class Deliverable(Enum):
-    RGB_PRE_FIRE = "rgb_pre_fire"
-    RGB_POST_FIRE = "rgb_post_fire"
-    NDVI_PRE_FIRE = "ndvi_pre_fire"
-    NDVI_POST_FIRE = "ndvi_post_fire"
-    RBR = "rbr"
     
 class PostFireAssessment:
     def __init__(self, geojson_path: str, start_date: str, end_date: str, deliverables=None):
-        """
-        Receives a Region of Interest (ROI).
-        """
-        self.gee = GEEClient().ee
-        self.roi = GeometryLoader.load_geojson(geojson_path)
+        # Validate input parameters
+        validate_geojson_path(geojson_path)
+        validate_date(start_date, "start_date")
+        validate_date(end_date, "end_date")
+        validate_deliverables(deliverables)
+ 
+        # Store parameters
         self.start_date = start_date
         self.end_date = end_date
-        
-        # Se o cliente não passar nada → pega todos os deliverables automaticamente
-        if deliverables is None:
-            self.deliverables = list(Deliverable)
-        else:
-            # Verifica se todos são Deliverable
-            invalid = [d for d in deliverables if not isinstance(d, Deliverable)]
-            if invalid:
-                raise ValueError(f"Invalid deliverables: {invalid}")
+        self.deliverables = deliverables or []
 
-            self.deliverables = deliverables
+        # Check chronological order
+        if start_date > end_date:
+            raise ValueError(f"'start_date' must be earlier than 'end_date'. Received: {start_date} > {end_date}")
+ 
+        # Initialize and Autenticate to GEE
+        self.gee = GEEClient().ee
+        self.roi = GeometryLoader.load_geojson(geojson_path)
         
         # Registro de todos os tipos de imagens possíveis
         self._deliverable_registry = {
@@ -52,25 +53,6 @@ class PostFireAssessment:
             Deliverable.NDVI_POST_FIRE: self._generate_ndvi_post_fire,
             Deliverable.RBR: self._generate_rbr,
         }
-
-    def _download_geotiff_bytes(self, image: ee.Image, scale: int = 10):
-        url = image.getDownloadURL({
-            "scale": scale,
-            "region": self.roi,
-            "format": "GEO_TIFF"
-        })
-
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
-        return response.content  # ← binário TIFF
-
-    def _expand_dates(self, start_date: str, end_date: str):
-        sd = datetime.strptime(start_date, "%Y-%m-%d")
-        ed = datetime.strptime(end_date, "%Y-%m-%d")
-        before_start = (sd - timedelta(days=DAYS_BEFORE_AFTER)).strftime("%Y-%m-%d")
-        after_end = (ed + timedelta(days=DAYS_BEFORE_AFTER)).strftime("%Y-%m-%d")
-        return before_start, start_date, end_date, after_end
 
     def _load_full_collection(self):
         """Load all images intersecting ROI under cloud threshold, mask clouds, select bands, add reflectance."""
@@ -105,24 +87,6 @@ class PostFireAssessment:
         if size_val == 0:
             raise ValueError(f"No images found in date range {start} → {end}")
         
-    def _download_single_band(self, image, band_name):
-        single_band = image.select([band_name])
-        return self._download_geotiff_bytes(single_band)
-
-    def _merge_bands(self, band_bytes_list):
-        memfiles = [MemoryFile(b) for b in band_bytes_list]
-        datasets = [m.open() for m in memfiles]
-
-        profile = datasets[0].profile
-        profile.update(count=len(datasets))
-
-        with MemoryFile() as mem_out:
-            with mem_out.open(**profile) as dst:
-                for idx, ds in enumerate(datasets, start=1):
-                    dst.write(ds.read(1), idx)
-
-            return mem_out.read()
-
     def _generate_rgb_pre_fire(self, mosaic):
         return self._generate_rgb(mosaic, Deliverable.RGB_PRE_FIRE.value)
 
@@ -146,12 +110,16 @@ class PostFireAssessment:
         ])
 
         # Baixa cada banda separadamente
-        b4 = self._download_single_band(rgb_image, 'B4_refl')
-        b3 = self._download_single_band(rgb_image, 'B3_refl')
-        b2 = self._download_single_band(rgb_image, 'B2_refl')
+        b4 = download_single_band(rgb_image, 'B4_refl', region=self.roi, scale=10)
+        b3 = download_single_band(rgb_image, 'B3_refl', region=self.roi, scale=10)
+        b2 = download_single_band(rgb_image, 'B2_refl', region=self.roi, scale=10)
 
         # Junta num único TIFF multibanda
-        rgb_bytes = self._merge_bands([b4, b3, b2])
+        rgb_bytes = merge_bands({
+            "B4_refl": b4,
+            "B3_refl": b3,
+            "B2_refl": b2,
+        })
 
         return {
             "filename": f"{filename_prefix}.tif", 
@@ -161,7 +129,7 @@ class PostFireAssessment:
 
     def _generate_ndvi_pre_fire(self, mosaic):
         img = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
-        data = self._download_single_band(img, 'ndvi')
+        data = download_single_band(img, 'ndvi', region=self.roi, scale=10)
         return {
             "filename": f"{Deliverable.NDVI_PRE_FIRE.value}.tif",
             "content_type": "image/tiff",
@@ -170,7 +138,7 @@ class PostFireAssessment:
 
     def _generate_ndvi_post_fire(self, mosaic):
         img = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
-        data = self._download_single_band(img, 'ndvi')
+        data = download_single_band(img, 'ndvi', region=self.roi, scale=10)
         return {
             "filename": f"{Deliverable.NDVI_POST_FIRE.value}.tif",
             "content_type": "image/tiff",
@@ -178,11 +146,58 @@ class PostFireAssessment:
         }
 
     def _generate_rbr(self, rbr_img):
-        data = self._download_single_band(rbr_img, 'rbr')
+        """
+        Gera apenas o RBR puro como GeoTIFF.
+        """
+        rbr_bytes = download_single_band(
+            rbr_img,
+            'rbr',
+            region=self.roi,
+            scale=10
+        )
+
+        return [
+            {
+                "filename": "rbr.tif",
+                "content_type": "image/tiff",
+                "data": rbr_bytes
+            }
+        ]
+
+    def _generate_severity_visual(self, severity_img):
+        """
+        Gera o JPEG colorido da severidade usando exatamente
+        a mesma paleta e parâmetros do JavaScript GEE.
+        """
+        # Mesmas cores, min, max do JS
+        palette = [
+            '00FF00',  # Unburned - verde
+            'FFFF00',  # Low - amarelo
+            'FFA500',  # Moderate - laranja
+            'FF0000',  # High - vermelho
+            '8B4513'   # Very High - marrom
+        ]
+
+        vis = severity_img.visualize(
+            min=0,
+            max=4,
+            palette=palette
+        )
+
+        # Baixa como JPEG igual ao JS
+        url = vis.getDownloadURL({
+            "format": "JPEG",
+            "region": self.roi,
+            "scale": 10
+        })
+
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+
         return {
-            "filename": "rbr.tif",
-            "content_type": "image/tiff",
-            "data": data
+            "filename": "severity.jpg",
+            "content_type": "image/jpeg",
+            "data": response.content
         }
 
     def _build_mosaic_with_indexes(self, collection):
@@ -226,9 +241,7 @@ class PostFireAssessment:
             maxPixels=1e12
         ).getInfo()
 
-        # Retorna no mesmo formato {0: hectares, 1: hectares, ...}
-        return {c: areas.get('area_' + str(c), 0) for c in range(5)}
-
+        return { c: float(areas.get(f'area_{c}', 0) or 0) for c in range(5) }
 
     def _classify_rbr_severity(self, rbr_img):
         """
@@ -261,7 +274,7 @@ class PostFireAssessment:
         full_collection = self._load_full_collection()
         timings["Sat collection loaded"] = time.time() - t0
 
-        before_start, before_end, after_start, after_end = self._expand_dates(
+        before_start, before_end, after_start, after_end = expand_dates(
             self.start_date, self.end_date
         )
 
@@ -290,9 +303,14 @@ class PostFireAssessment:
         
         for d in self.deliverables:
             gen_fn = self._deliverable_registry.get(d)
-            
+                    
             if d == Deliverable.RBR:
-                images[d.value] = gen_fn(rbr)
+                rbr_outputs = gen_fn(rbr)
+                for out in rbr_outputs:
+                    images[out["filename"]] = out
+
+                # adiciona a visualização colorida
+                images["severity_visual"] = self._generate_severity_visual(severity)
                 continue
 
             if "pre" in d.value:

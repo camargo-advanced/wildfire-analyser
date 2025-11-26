@@ -15,5 +15,9 @@ class GeometryLoader:
             geojson = json.load(f)
 
         # Converts GeoJSON to EE geometry
-        geometry = ee.Geometry(geojson['features'][0]['geometry'])
+        try:
+            geometry = ee.Geometry(geojson['features'][0]['geometry'])
+        except Exception as e:
+            raise ValueError(f"Invalid GeoJSON geometry: {e}")
+        
         return geometry
