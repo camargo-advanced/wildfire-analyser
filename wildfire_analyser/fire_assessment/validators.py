@@ -48,3 +48,12 @@ def validate_deliverables(deliverables):
     invalid = [d for d in deliverables if not isinstance(d, Deliverable)]
     if invalid:
         raise ValueError(f"Invalid deliverables: {invalid}")
+
+def ensure_not_empty(collection, start, end):
+    try:
+        size_val = collection.size().getInfo()
+    except Exception:
+        size_val = 0
+
+    if size_val == 0:
+        raise ValueError(f"No images found in date range {start} → {end}")

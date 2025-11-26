@@ -26,7 +26,7 @@ def main():
                                         #Deliverable.RGB_POST_FIRE,
                                         #Deliverable.NDVI_PRE_FIRE,
                                         #Deliverable.NDVI_POST_FIRE,
-                                        Deliverable.RBR,
+                                        #Deliverable.RBR,
                                     ])
 
         # Run the analysis, which returns a dictionary with binary GeoTIFFs
