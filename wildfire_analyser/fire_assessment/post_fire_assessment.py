@@ -91,181 +91,132 @@ class PostFireAssessment:
     def merge_bands(self, band_tiffs: dict[str, bytes]) -> bytes:
         """
         Merge multiple single-band GeoTIFFs (raw bytes) into a single multi-band GeoTIFF.
-        band_tiffs → dict: {"red": b"...", "green": b"..."}
-        Returns merged GeoTIFF bytes.
         """
-        try:
-            memfiles = {b: MemoryFile(tiff_bytes) for b, tiff_bytes in band_tiffs.items()}
-            datasets = {b: memfiles[b].open() for b in memfiles}
+        memfiles = {b: MemoryFile(tiff_bytes) for b, tiff_bytes in band_tiffs.items()}
+        datasets = {b: memfiles[b].open() for b in memfiles}
 
-            # Reference band to copy metadata
-            first = next(iter(datasets.values()))
-            profile = first.profile.copy()
-            profile.update(count=len(datasets))
+        # Reference band to copy metadata
+        first = next(iter(datasets.values()))
+        profile = first.profile.copy()
+        profile.update(count=len(datasets))
 
-            # Merge bands
-            with MemoryFile() as merged_mem:
-                with merged_mem.open(**profile) as dst:
-                    for idx, (band, ds) in enumerate(datasets.items(), start=1):
-                        dst.write(ds.read(1), idx)
+        # Merge bands
+        with MemoryFile() as merged_mem:
+            with merged_mem.open(**profile) as dst:
+                for idx, (band, ds) in enumerate(datasets.items(), start=1):
+                    dst.write(ds.read(1), idx)
 
-                return merged_mem.read()
-
-        except Exception as e:
-            logger.error(f"Failed to merge GeoTIFF bands: {e}")
-            raise
+            return merged_mem.read()
         
-    def _generate_rgb_pre_fire(self, mosaic):
+    def _generate_rgb_pre_fire(self, mosaic: ee.Image) -> dict:
+        """
+        Generates two GeoTIFF and JPEG images.
+        """
+        # Generate the technical multi-band RGB GeoTIFF
         tiff = self._generate_rgb(mosaic, Deliverable.RGB_PRE_FIRE.value)
-        jpeg = self._generate_rgb_visual(mosaic, "rgb_pre_fire_visual")
+        
+        # Generate the visual RGB JPEG (with overlay)
+        rgb_img = mosaic.select(['B4_refl', 'B3_refl', 'B2_refl'])
+        vis_params = {"min": 0.0, "max": 0.3}
+        jpeg = self._generate_visual_image(rgb_img, "rgb_pre_fire_visual", vis_params)
+    
         return tiff, jpeg
 
-    def _generate_rgb_post_fire(self, mosaic):
+    def _generate_rgb_post_fire(self, mosaic: ee.Image) -> dict:
+        """
+        Generates two GeoTIFF and JPEG images.
+        """
+        # Generate the technical multi-band RGB GeoTIFF
         tiff = self._generate_rgb(mosaic, Deliverable.RGB_POST_FIRE.value)
-        jpeg = self._generate_rgb_visual(mosaic, "rgb_post_fire_visual")
+
+        # Generate the visual RGB JPEG (with overlay)
+        rgb_img = mosaic.select(['B4_refl', 'B3_refl', 'B2_refl'])
+        vis_params = {"min": 0.0, "max": 0.3}
+        jpeg = self._generate_visual_image(rgb_img, "rgb_post_fire_visual", vis_params)
+
         return tiff, jpeg
 
     def _generate_rgb(self, mosaic, filename_prefix):
         """
         Generates an RGB (B4, B3, B2) as a single multiband GeoTIFF.
-        Can be used for both PRE-FIRE and POST-FIRE
         """
-        
-        rgb_image = mosaic.select([
-            'B4_refl',  # Red
-            'B3_refl',  # Green
-            'B2_refl'   # Blue
-        ])
-
-        # Downloads each band separately.
-        b4 = download_single_band(rgb_image, 'B4_refl', region=self.roi)
-        b3 = download_single_band(rgb_image, 'B3_refl', region=self.roi)
-        b2 = download_single_band(rgb_image, 'B2_refl', region=self.roi)
-
         # Merges into a single multiband TIFF.
-        rgb_bytes = self.merge_bands({
-            "B4_refl": b4,
-            "B3_refl": b3,
-            "B2_refl": b2,
+        image_bytes = self.merge_bands({
+            "B4_refl": download_single_band(mosaic, 'B4_refl', region=self.roi),
+            "B3_refl": download_single_band(mosaic, 'B3_refl', region=self.roi),
+            "B2_refl": download_single_band(mosaic, 'B2_refl', region=self.roi),
         })
 
         return {
             "filename": f"{filename_prefix}.tif", 
             "content_type": "image/tiff",
-            "data": rgb_bytes
+            "data": image_bytes
         }
 
-    def _generate_ndvi_pre_fire(self, mosaic):
-        return self._generate_ndvi(mosaic, Deliverable.NDVI_PRE_FIRE.value)
+    def _generate_visual_image(self, img: ee.Image, filename: str, vis_params: dict) -> dict:
+        """
+        Generates a JPEG of an Earth Engine image with styled ROI overlay.
+        """
+        vis = img.visualize(**vis_params)
+        overlay = self._styled_roi_overlay().visualize()
+        final = vis.blend(overlay)
 
-    def _generate_ndvi_post_fire(self, mosaic):
-        return self._generate_ndvi(mosaic, Deliverable.NDVI_POST_FIRE.value)
+        url = final.getDownloadURL({
+            "format": "JPEG",
+            "region": self.roi,
+            "scale": 10
+        })
 
-    def _generate_ndvi(self, mosaic, filename):
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+
+        return {
+            "filename": f"{filename}.jpg",
+            "content_type": "image/jpeg",
+            "data": response.content
+        }
+    
+    def _generate_ndvi(self, mosaic: ee.Image, filename: str) -> dict:
         """
         Computes NDVI from a mosaic using reflectance bands (B8_refl and B4_refl).
         Downloads the resulting index as a single-band GeoTIFF and returns it as a
         deliverable object. 
         """
-        img = mosaic.normalizedDifference(['B8_refl', 'B4_refl']).rename('ndvi')
-        data = download_single_band(img, 'ndvi', region=self.roi)
+        data = download_single_band(mosaic, 'ndvi', region=self.roi)
         return {
             "filename": f"{filename}.tif",
             "content_type": "image/tiff",
             "data": data
         }
 
-    def _generate_rbr(self, rbr_img, severity_img):
+    def _generate_rbr(self, rbr_img: ee.Image, severity_img: ee.Image) -> tuple[dict, dict, dict]:
         """
         Computes RBR and generates deliverables:
             - rbr.tif (GeoTIFF)
-            - severity_visual.jpg (RBR class color)
+            - rbr_severity_visual.jpg (RBR class color)
             - rbr_visual.jpg (RBR color JPEG with rbrVis palette)
         """
-        # RBR GeoTIFF
-        rbr_bytes = download_single_band(rbr_img, 'rbr', region=self.roi, scale=10)
+        # GeoTIFF
+        image_bytes = download_single_band(rbr_img, 'rbr', region=self.roi, scale=10)
         tiff_deliverable = {
             "filename": "rbr.tif",
             "content_type": "image/tiff",
-            "data": rbr_bytes
+            "data": image_bytes
         }
 
-        # Severidade colorida
-        severity_deliverable = self._generate_severity_visual(severity_img)
+        # Visual JPEG
+        vis_params = {"min": -0.5, "max": 0.6, "palette": ["black", "yellow", "red"]}
+        visual_deliverable = self._generate_visual_image(rbr_img, "rbr_visual", vis_params)
 
-        # RBR visual JPEG
-        rbr_visual_deliverable = self._generate_rbr_visual(rbr_img)
-
-        return tiff_deliverable, severity_deliverable, rbr_visual_deliverable
-
-    def _generate_rbr_visual(self, rbr_img):
-        """
-        Generates a colorized RBR JPEG using the visualization parameters:
-            min: -0.5
-            max: 0.6
-            palette: ['black','yellow','red']
-        """
-        rbr_vis_params = {
-            "min": -0.5,
-            "max": 0.6,
-            "palette": ["black","yellow","red"]
+        # Severity visual JPEG
+        severity_vis_params = {
+            "min": 0,
+            "max": 4,
+            "palette": ["00FF00","FFFF00","FFA500","FF0000","8B4513"]
         }
+        severity_visual_deliverable = self._generate_visual_image(severity_img, "rbr_severity_visual", severity_vis_params)
 
-        vis = rbr_img.visualize(**rbr_vis_params)
-        styled = self._styled_roi_overlay().visualize()
-        final = ee.ImageCollection([vis, styled]).mosaic()
-        
-        url = final.getDownloadURL({
-            "format": "JPEG",
-            "region": self.roi,
-            "scale": 10
-        })
-
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
-        return {
-            "filename": "rbr_visual.jpg",
-            "content_type": "image/jpeg",
-            "data": response.content
-        }
-
-    def _generate_severity_visual(self, severity_img):
-        """
-        Generates the severity color JPEG using the exact same palette and 
-        parameters as the JavaScript GEE implementation.
-        """
-        palette = [
-            '00FF00',  # Unburned - verde
-            'FFFF00',  # Low - amarelo
-            'FFA500',  # Moderate - laranja
-            'FF0000',  # High - vermelho
-            '8B4513'   # Very High - marrom
-        ]
-
-        vis = severity_img.visualize(
-            min=0,
-            max=4,
-            palette=palette
-        )
-        styled = self._styled_roi_overlay().visualize()
-        final = ee.ImageCollection([vis, styled]).mosaic()
-
-        # Download jpeg
-        url = final.getDownloadURL({
-            "format": "JPEG",
-            "region": self.roi,
-            "scale": 10
-        })
-
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
-        return {
-            "filename": "severity_visual.jpg",
-            "content_type": "image/jpeg",
-            "data": response.content
-        }
+        return tiff_deliverable, severity_visual_deliverable, visual_deliverable
 
     def _styled_roi_overlay(self):
         """Creates a styled overlay of the ROI polygon (purple outline, no fill)."""
@@ -277,41 +228,7 @@ class PostFireAssessment:
         )
         return styled
 
-    def _generate_rgb_visual(self, mosaic, prefix):
-        """
-        Generates a colorized RGB JPEG for visualization purposes.
-        Uses custom visualization parameters similar to JavaScript GEE.
-        """
-        # Seleciona bandas RGB refletância
-        rgb_img = mosaic.select(['B4_refl', 'B3_refl', 'B2_refl'])
-
-        # Define visualização semelhante ao RBR
-        rgb_vis_params = {
-            "min": 0.0,
-            "max": 0.3,  # ajustável conforme preferir
-        }
-
-        vis = rgb_img.visualize(**rgb_vis_params)
-        styled = self._styled_roi_overlay().visualize()
-        final = ee.ImageCollection([vis, styled]).mosaic()
-
-        # Download JPEG
-        url = final.getDownloadURL({
-            "format": "JPEG",
-            "region": self.roi,
-            "scale": 10
-        })
-
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
-        return {
-            "filename": f"{prefix}.jpg",
-            "content_type": "image/jpeg",
-            "data": response.content
-        }
-
-    def _build_mosaic_with_indexes(self, collection):
+    def _build_mosaic_with_indexes(self, collection: ee.ImageCollection) -> ee.Image:
         """
         Takes a filtered collection → builds a mosaic → computes NDVI and 
         NBR → returns a mosaic with the additional bands.
@@ -321,7 +238,7 @@ class PostFireAssessment:
         nbr  = mosaic.normalizedDifference(["B8_refl", "B12_refl"]).rename("nbr")
         return mosaic.addBands([ndvi, nbr])
 
-    def _compute_rbr(self, before_mosaic, after_mosaic):
+    def _compute_rbr(self, before_mosaic: ee.Image, after_mosaic: ee.Image) -> ee.Image:
         """
         Computes RBR (Relative Burn Ratio) from BEFORE and AFTER mosaics.
         Assumes both mosaics already include band 'nbr'.
@@ -330,7 +247,7 @@ class PostFireAssessment:
         rbr = delta_nbr.divide(before_mosaic.select('nbr').add(1.001)).rename('rbr')
         return rbr
 
-    def _compute_area_by_severity(self, severity_img):
+    def _compute_area_by_severity(self, severity_img: ee.Image) -> dict[int, float]:
         """
         Calculates the area per class (in hectares) within the ROI in an optimized way.
         """
@@ -355,7 +272,7 @@ class PostFireAssessment:
 
         return { c: float(areas.get(f'area_{c}', 0) or 0) for c in range(5) }
 
-    def _classify_rbr_severity(self, rbr_img):
+    def _classify_rbr_severity(self, rbr_img: ee.Image) -> ee.Image:
         """
         Classify RBR by severity:
             0 = Unburned        (RBR < 0.1)
@@ -422,10 +339,6 @@ class PostFireAssessment:
 
         for d in self.deliverables:
             gen_fn = deliverable_registry.get(d)
-            if not gen_fn:
-                logger.warning(f"No generator for deliverable {d}")
-                continue
-
             outputs = gen_fn({})
             if isinstance(outputs, tuple) or isinstance(outputs, list):
                 for out in outputs:
@@ -439,6 +352,5 @@ class PostFireAssessment:
             "images": images,
             "timings": timings,
             "area_by_severity": area_stats
-
         }
 
