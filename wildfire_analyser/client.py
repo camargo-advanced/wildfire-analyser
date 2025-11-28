@@ -22,20 +22,21 @@ def main():
         # Initialize the wildfire assessment processor with date range
         runner = PostFireAssessment(geojson_path, "2024-09-01", "2024-11-08", 
                                     deliverables=[
-                                        Deliverable.RGB_PRE_FIRE,
-                                        Deliverable.RGB_POST_FIRE,
-                                        Deliverable.NDVI_PRE_FIRE,
+                                        #Deliverable.RGB_PRE_FIRE,
+                                        #Deliverable.RGB_POST_FIRE,
+                                        #Deliverable.NDVI_PRE_FIRE,
                                         Deliverable.NDVI_POST_FIRE,
-                                        Deliverable.RBR,
+                                        #Deliverable.RBR,
                                     ])
 
         # Run the analysis
         result = runner.run_analysis()
 
         # Print fire severity
-        for sev_value, area in result["area_by_severity"].items():
-            sev = FireSeverity(sev_value)
-            logger.info(f"{sev.label}: {area:.2f} ha")
+        for row in result["area_by_severity"]:
+            logger.info(
+                f"{row['severity_name']}: {row['ha']:.2f} ha ({row['percent']:.2f}%)"
+            )
 
         # Save each deliverable to local files
         for key, item in result["images"].items():
