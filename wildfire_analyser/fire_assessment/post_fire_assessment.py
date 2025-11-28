@@ -51,18 +51,21 @@ class PostFireAssessment:
         """
         Authenticate to Google Earth Engine using a service account key JSON.
         """
-        if not gee_key_json:
-            raise ValueError("GEE private key JSON must be provided.")
-
         # Converte a string JSON para dicionário
-        key_dict = json.loads(gee_key_json)
+        try:
+            key_dict = json.loads(gee_key_json)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Error decoding GEE_PRIVATE_KEY_JSON: {e}") from e
 
         # Inicializa GEE usando arquivo temporário
-        with NamedTemporaryFile(mode="w+", suffix=".json") as f:
-            json.dump(key_dict, f)
-            f.flush()
-            credentials = ee.ServiceAccountCredentials(key_dict["client_email"], f.name)
-            ee.Initialize(credentials)
+        try:
+            with NamedTemporaryFile(mode="w+", suffix=".json") as f:
+                json.dump(key_dict, f)
+                f.flush()
+                credentials = ee.ServiceAccountCredentials(key_dict["client_email"], f.name)
+                ee.Initialize(credentials)
+        except Exception as e:
+            raise RuntimeError(f"Failed to authenticate with Google Earth Engine: {e}") from e
 
         return ee
 
@@ -80,7 +83,7 @@ class PostFireAssessment:
         try:
             geometry = ee.Geometry(geojson['features'][0]['geometry'])
         except Exception as e:
-            raise ValueError(f"Invalid GeoJSON geometry: {e}")
+            raise ValueError(f"Invalid GeoJSON geometry: {e}") from e
         
         return geometry
     
