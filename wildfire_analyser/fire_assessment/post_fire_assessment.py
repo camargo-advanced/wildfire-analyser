@@ -2,6 +2,7 @@
 import logging
 import json
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 import time
 
 import ee
@@ -9,7 +10,6 @@ import requests
 from rasterio.io import MemoryFile
 
 from wildfire_analyser.fire_assessment.date_utils import expand_dates
-from wildfire_analyser.fire_assessment.gee_client import GEEClient
 from wildfire_analyser.fire_assessment.deliverable import Deliverable
 from wildfire_analyser.fire_assessment.validators import (
     validate_date,
@@ -27,25 +27,44 @@ logger = logging.getLogger(__name__)
 
 
 class PostFireAssessment:
-    def __init__(self, geojson_path: str, start_date: str, end_date: str, deliverables=None):
+    def __init__(self, gee_key_json: str, geojson_path: str, start_date: str, end_date: str, 
+                 deliverables=None, track_timings: bool = False):
         # Validate input parameters
         validate_geojson_path(geojson_path)
         validate_date(start_date, "start_date")
         validate_date(end_date, "end_date")
         validate_deliverables(deliverables)
- 
-        # Store parameters
-        self.start_date = start_date
-        self.end_date = end_date
-        self.deliverables = deliverables or []
 
         # Check chronological order
         if start_date > end_date:
             raise ValueError(f"'start_date' must be earlier than 'end_date'. Received: {start_date} > {end_date}")
- 
-        # Initialize and Autenticate to GEE
-        self.gee = GEEClient().ee
+      
+        # Store parameters
+        self.gee = self.gee_authenticate(gee_key_json)
         self.roi = self.load_geojson(geojson_path)
+        self.start_date = start_date
+        self.end_date = end_date
+        self.deliverables = deliverables or []
+        self.track_timings = track_timings
+
+    def gee_authenticate(self, gee_key_json: str) -> ee:
+        """
+        Authenticate to Google Earth Engine using a service account key JSON.
+        """
+        if not gee_key_json:
+            raise ValueError("GEE private key JSON must be provided.")
+
+        # Converte a string JSON para dicionário
+        key_dict = json.loads(gee_key_json)
+
+        # Inicializa GEE usando arquivo temporário
+        with NamedTemporaryFile(mode="w+", suffix=".json") as f:
+            json.dump(key_dict, f)
+            f.flush()
+            credentials = ee.ServiceAccountCredentials(key_dict["client_email"], f.name)
+            ee.Initialize(credentials)
+
+        return ee
 
     def load_geojson(self, path: str) -> ee.Geometry:
         """Load a GeoJSON file and return an Earth Engine Geometry."""
@@ -333,20 +352,50 @@ class PostFireAssessment:
 
         return table
 
+    def force_execution(self, obj):
+        """
+        Forces GEE to execute pending computations while retrieving the smallest possible data.
+        """
+        try:
+            # Collections → safest, smallest fetch possible
+            if isinstance(obj, ee.ImageCollection) or isinstance(obj, ee.FeatureCollection):
+                return obj.size().getInfo()
+
+            # Images → never call getInfo() directly (too heavy)
+            if isinstance(obj, ee.Image):
+                # Use a tiny region and simple stats to force execution
+                # without downloading the full image
+                test = obj.reduceRegion(
+                    reducer=ee.Reducer.mean(),
+                    geometry=self.roi.centroid(),
+                    scale=100,
+                    maxPixels=1e9
+                )
+                return test.getInfo()
+
+            # Numbers / Dictionaries / anything else
+            return obj.getInfo()
+
+        except Exception:
+            return None
+
     def run_analysis(self):
         timings = {}
 
         # Load satellite collection
-        t0 = time.time()
+        if self.track_timings: t0 = time.time()
         full_collection = self._load_full_collection()
-        timings["Sat collection loaded"] = time.time() - t0
+        if self.track_timings: 
+            self.force_execution(full_collection)
+            timings["Sat collection loaded"] = time.time() - t0
 
+        # Expand dates to maximize satellite image coverage
         before_start, before_end, after_start, after_end = expand_dates(
             self.start_date, self.end_date, DAYS_BEFORE_AFTER 
         )
 
         # Build pre fire mosaic
-        t1 = time.time()
+        if self.track_timings: t1 = time.time()
         before_collection = full_collection.filterDate(before_start, before_end)
         ensure_not_empty(before_collection, before_start, before_end)
         before_mosaic = self._build_mosaic_with_indexes(before_collection)
@@ -362,7 +411,9 @@ class PostFireAssessment:
         # Classification and severity extension calculation
         severity = self._classify_rbr_severity(rbr)
         area_stats = self._compute_area_by_severity(severity)
-        timings["Indexes calculated"] = time.time() - t1
+        if self.track_timings: 
+            self.force_execution(area_stats)
+            timings["Indexes calculated"] = time.time() - t1
 
         deliverable_registry = {
             Deliverable.RGB_PRE_FIRE: lambda ctx: self._generate_rgb_pre_fire(before_mosaic),
@@ -373,7 +424,7 @@ class PostFireAssessment:
         }
 
         # Download binaries
-        t2 = time.time()
+        if self.track_timings: t2 = time.time()
         images = {} 
 
         for d in self.deliverables:
@@ -385,11 +436,10 @@ class PostFireAssessment:
             else:
                 images[outputs["filename"]] = outputs
 
-        timings["Images downloaded"] = time.time() - t2
+        if self.track_timings: timings["Images downloaded"] = time.time() - t2
 
         return {
             "images": images,
             "timings": timings,
             "area_by_severity": self.format_severity_table(area_stats)
         }
-
