@@ -294,6 +294,45 @@ class PostFireAssessment:
 
         return severity
 
+    def format_severity_table(self, area_dict: dict[int, float]) -> list[dict]:
+        """
+        Converts the raw {severity: hectares} dict into a structured JSON
+        with severity, severity_name, ha, percent, and color.
+        """
+
+        severity_names = {
+            0: "Unburned",
+            1: "Low",
+            2: "Moderate",
+            3: "High",
+            4: "Very High",
+        }
+
+        severity_colors = {
+            0: "Green",
+            1: "Yellow",
+            2: "Orange",
+            3: "Red",
+            4: "Maroon",
+        }
+
+        total_ha = sum(area_dict.values()) or 1  # avoid division by zero
+
+        table = []
+        for s in range(5):
+            ha = float(area_dict.get(s, 0))
+            pct = (ha / total_ha) * 100
+
+            table.append({
+                "severity": s,
+                "severity_name": severity_names[s],
+                "ha": round(ha, 2),
+                "percent": round(pct, 2),
+                "color": severity_colors[s]
+            })
+
+        return table
+
     def run_analysis(self):
         timings = {}
 
@@ -351,6 +390,6 @@ class PostFireAssessment:
         return {
             "images": images,
             "timings": timings,
-            "area_by_severity": area_stats
+            "area_by_severity": self.format_severity_table(area_stats)
         }
 
