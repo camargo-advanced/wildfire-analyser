@@ -1,6 +1,6 @@
 [project]
 name = "wildfire-analyser"
-version = "0.1.6"
+version = "0.1.7"
 description = "Python library for post-fire assessment and wildfire analysis using Google Earth Engine."
 authors = [
     { name = "Marcelo Camargo" }
