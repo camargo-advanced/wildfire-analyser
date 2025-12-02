@@ -6,7 +6,6 @@ from tempfile import NamedTemporaryFile
 import time
 
 import ee
-import requests
 from rasterio.io import MemoryFile
 
 from wildfire_analyser.fire_assessment.date_utils import expand_dates
@@ -17,11 +16,12 @@ from wildfire_analyser.fire_assessment.validators import (
     validate_deliverables,
     ensure_not_empty
 )
-from wildfire_analyser.fire_assessment.downloaders import download_single_band
+from wildfire_analyser.fire_assessment.downloaders import download_single_band, download_visual_image
 
 CLOUD_THRESHOLD = 100
 COLLECTION_ID = "COPERNICUS/S2_SR_HARMONIZED"
 DAYS_BEFORE_AFTER = 30
+IMAGE_SCALE = 10
 
 logger = logging.getLogger(__name__)
 
@@ -164,9 +164,9 @@ class PostFireAssessment:
         """
         # Merges into a single multiband TIFF.
         image_bytes = self.merge_bands({
-            "B4_refl": download_single_band(mosaic, 'B4_refl', region=self.roi),
-            "B3_refl": download_single_band(mosaic, 'B3_refl', region=self.roi),
-            "B2_refl": download_single_band(mosaic, 'B2_refl', region=self.roi),
+            "B4_refl": download_single_band(mosaic, 'B4_refl', region=self.roi, scale=IMAGE_SCALE),
+            "B3_refl": download_single_band(mosaic, 'B3_refl', region=self.roi, scale=IMAGE_SCALE),
+            "B2_refl": download_single_band(mosaic, 'B2_refl', region=self.roi, scale=IMAGE_SCALE),
         })
 
         return {
@@ -183,19 +183,18 @@ class PostFireAssessment:
         overlay = self._styled_roi_overlay().visualize()
         final = vis.blend(overlay)
 
-        url = final.getDownloadURL({
-            "format": "JPEG",
-            "region": self.roi,
-            "scale": 10
-        })
+        jpeg_bytes = download_visual_image(
+            img=final,
+            region=self.roi,
+            scale=IMAGE_SCALE,
+            format="JPEG"
+        )
 
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
+        # Return dict just like before
         return {
             "filename": f"{filename}.jpg",
             "content_type": "image/jpeg",
-            "data": response.content
+            "data": jpeg_bytes
         }
     
     def _generate_ndvi(self, mosaic: ee.Image, filename: str) -> dict:
@@ -204,7 +203,7 @@ class PostFireAssessment:
         Downloads the resulting index as a single-band GeoTIFF and returns it as a
         deliverable object. 
         """
-        data = download_single_band(mosaic, 'ndvi', region=self.roi)
+        data = download_single_band(mosaic, 'ndvi', region=self.roi, scale=IMAGE_SCALE)
         return {
             "filename": f"{filename}.tif",
             "content_type": "image/tiff",
@@ -219,7 +218,7 @@ class PostFireAssessment:
             - rbr_visual.jpg (RBR color JPEG with rbrVis palette)
         """
         # GeoTIFF
-        image_bytes = download_single_band(rbr_img, 'rbr', region=self.roi, scale=10)
+        image_bytes = download_single_band(rbr_img, 'rbr', region=self.roi, scale=IMAGE_SCALE)
         tiff_deliverable = {
             "filename": "rbr.tif",
             "content_type": "image/tiff",
@@ -288,7 +287,7 @@ class PostFireAssessment:
         areas = stacked.reduceRegion(
             reducer=ee.Reducer.sum(),
             geometry=self.roi,
-            scale=10,
+            scale=IMAGE_SCALE,
             maxPixels=1e12
         ).getInfo()
 

@@ -27,16 +27,17 @@ def main():
 
         # Path to the GeoJSON polygon used as the Region of Interest (ROI)
         geojson_path = os.path.join("polygons", "APAPiracicabaJuqueriMirimAreaII.geojson")
+        #geojson_path = os.path.join("polygons", "eejatai.geojson")
 
         # Initialize the wildfire assessment processor with date range
         runner = PostFireAssessment(gee_key_json,
                                     geojson_path, "2024-09-01", "2024-11-08", 
                                     deliverables=[
-                                        #Deliverable.RGB_PRE_FIRE,
-                                        #Deliverable.RGB_POST_FIRE,
-                                        #Deliverable.NDVI_PRE_FIRE,
+                                        Deliverable.RGB_PRE_FIRE,
+                                        Deliverable.RGB_POST_FIRE,
+                                        Deliverable.NDVI_PRE_FIRE,
                                         Deliverable.NDVI_POST_FIRE,
-                                        #Deliverable.RBR,
+                                        Deliverable.RBR,
                                     ], 
                                     track_timings=True)
 
