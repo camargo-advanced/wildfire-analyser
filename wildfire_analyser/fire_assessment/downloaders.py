@@ -5,10 +5,22 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Local cache:  { (bbox_key) → best_scale }
+scale_cache = {}
 
-# -------------------------------------------------------------------------
-# Função ÚNICA — genérica para TIFF/JPEG/whatever
-# -------------------------------------------------------------------------
+
+def bbox_key(region: ee.Geometry):
+    """
+    Compute a stable and compact key for a geometry.
+
+    - Uses the bounding box
+    - Rounds coordinates to 3 decimal places
+    - Output: tuple usable as dict key
+    """
+    coords = region.bounds().coordinates().getInfo()
+    flat = [round(c, 3) for pair in coords[0] for c in pair]
+    return tuple(flat)
+
 def download_image(
     image: ee.Image,
     region: ee.Geometry,
@@ -17,89 +29,78 @@ def download_image(
     bands: list | None = None,
 ) -> bytes:
     """
-    Generic and robust Earth Engine downloader.
-    
-    - Tenta automaticamente: 10 → 20 → ... → 150 m
-    - Aumenta scale SOMENTE quando o GEE retornar erro real de tamanho
-    - Serve para TIFF (single-band) ou JPEG/PNG (visual)
-    - Retorna sempre bytes
+    Generic and robust Earth Engine image downloader with caching.
+
+    - If a successful scale was already found for this region, reuses it directly.
+    - Otherwise tries scales: scale → scale+15 → ... → 150.
+    - Caches the first scale that works for future downloads.
+    - Works for both single-band (TIFF) and multi-band images.
     """
-    try:
-        # Select band(s) if needed
-        img = image
-        if bands:
-            img = image.select(bands)
 
-        # LOOP: 10 → 20 → ... → 150
-        for attempt_scale in range(scale, 151, 15):
+    region_id = bbox_key(region)
 
-            try:
-                url = img.getDownloadURL({
-                    "scale": attempt_scale,
-                    "region": region,
-                    "format": format
-                })
+    # Select band(s) if needed
+    img = image.select(bands) if bands else image
 
-                resp = requests.get(url, stream=True)
-                resp.raise_for_status()
+    # Try using cached scale first (fast path)
+    if region_id in scale_cache:
+        cached_scale = scale_cache[region_id]
 
-                logger.info(f"Downloaded successfully at {attempt_scale} m")
-                return resp.content
+        try:
+            logger.info(f"Using cached scale {cached_scale} m for region {region_id}")
+            url = img.getDownloadURL({
+                "scale": cached_scale,
+                "region": region,
+                "format": format
+            })
 
-            except Exception as e:
-                # erro clássico de tamanho do GEE
-                if "Total request size" in str(e):
-                    logger.info(
-                        f"Scale {attempt_scale} m rejected by EE (too large). "
-                        f"Trying a larger scale..."
-                    )
-                    continue  # tenta próximo scale
+            resp = requests.get(url, stream=True)
+            resp.raise_for_status()
 
-                # outro erro → levantar
-                raise
+            logger.info(f"Downloaded successfully with cached scale {cached_scale} m")
+            return resp.content
 
-        raise RuntimeError(
-            "Unable to download image even at 150 m — region too large."
-        )
+        except Exception as e:
+            logger.warning(
+                f"Cached scale {cached_scale} m failed ({e}). Will try fallback loop."
+            )
+            # continue to fallback progressive search
 
-    except Exception as e:
-        logger.error(f"download_image failed: {e}")
-        raise
+    # Progressive search for a working scale (slow path)
+    for attempt_scale in range(scale, 151, 15):
 
-# -------------------------------------------------------------------------
-# Wrappers → API igual à sua versão anterior
-# -------------------------------------------------------------------------
+        try:
+            url = img.getDownloadURL({
+                "scale": attempt_scale,
+                "region": region,
+                "format": format
+            })
 
-def download_single_band(
-    image: ee.Image,
-    band_name: str,
-    region: ee.Geometry,
-    scale: int = 10
-) -> bytes:
-    """
-    Wrapper for downloading a single band TIFF.
-    """
-    return download_image(
-        image=image,
-        region=region,
-        scale=scale,
-        format="GEO_TIFF",
-        bands=[band_name]
-    )
+            resp = requests.get(url, stream=True)
+            resp.raise_for_status()
 
-def download_visual_image(
-    img: ee.Image,
-    region: ee.Geometry,
-    scale: int = 10,
-    format: str = "JPEG"
-) -> bytes:
-    """
-    Wrapper for multi-band (usually RGB) visualization downloads.
-    """
-    return download_image(
-        image=img,
-        region=region,
-        scale=scale,
-        format=format,
-        bands=None
+            logger.info(f"Downloaded successfully at {attempt_scale} m")
+
+            # SAVE the working scale in cache for future images
+            scale_cache[region_id] = attempt_scale
+            logger.info(
+                f"Caching scale {attempt_scale} m for region {region_id}"
+            )
+
+            return resp.content
+
+        except Exception as e:
+            # classic GEE “too large” error
+            if "Total request size" in str(e):
+                logger.info(
+                    f"Scale {attempt_scale} m rejected (too large). Trying next..."
+                )
+                continue
+
+            # other error → raise immediately
+            raise
+
+    # No scale worked up to 150 m
+    raise RuntimeError(
+        "Unable to download image even at 150 m — region too large."
     )

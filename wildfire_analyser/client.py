@@ -35,9 +35,9 @@ def main():
                                     deliverables=[
                                         Deliverable.RGB_PRE_FIRE,
                                         Deliverable.RGB_POST_FIRE,
-                                        Deliverable.NDVI_PRE_FIRE,
-                                        Deliverable.NDVI_POST_FIRE,
-                                        Deliverable.RBR,
+                                        #Deliverable.NDVI_PRE_FIRE,
+                                        #Deliverable.NDVI_POST_FIRE,
+                                        #Deliverable.RBR,
                                     ], 
                                     track_timings=True)
 

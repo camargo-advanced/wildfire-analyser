@@ -16,9 +16,9 @@ from wildfire_analyser.fire_assessment.validators import (
     validate_deliverables,
     ensure_not_empty
 )
-from wildfire_analyser.fire_assessment.downloaders import download_single_band, download_visual_image
+from wildfire_analyser.fire_assessment.downloaders import download_image
 
-CLOUD_THRESHOLD = 100
+CLOUD_THRESHOLD = 70
 COLLECTION_ID = "COPERNICUS/S2_SR_HARMONIZED"
 DAYS_BEFORE_AFTER = 30
 IMAGE_SCALE = 10
@@ -91,17 +91,24 @@ class PostFireAssessment:
         """Load all images intersecting ROI under cloud threshold, mask clouds, select bands, add reflectance."""
         bands_to_select = ['B2', 'B3', 'B4', 'B8', 'B12', 'QA60']
         
+        def mask_s2_clouds(img):
+            qa = img.select('QA60')
+            cloud = qa.bitwiseAnd(1 << 10).neq(0)
+            cirrus = qa.bitwiseAnd(1 << 11).neq(0)
+            mask = cloud.Or(cirrus).Not()
+            return img.updateMask(mask)
+
         collection = (
             self.gee.ImageCollection(COLLECTION_ID)
             .filterBounds(self.roi)
             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', CLOUD_THRESHOLD))
+            .map(mask_s2_clouds)
             .sort('CLOUDY_PIXEL_PERCENTAGE', False)
-            .select(bands_to_select)
         )
         
         # Function to add reflectance (_refl).
         def preprocess(img):
-            refl_bands = img.select('B.*').multiply(0.0001)
+            refl_bands = img.select(bands_to_select).multiply(0.0001)
             refl_names = refl_bands.bandNames().map(lambda b: ee.String(b).cat('_refl'))
             img = img.addBands(refl_bands.rename(refl_names))
             return img
@@ -164,9 +171,9 @@ class PostFireAssessment:
         """
         # Merges into a single multiband TIFF.
         image_bytes = self.merge_bands({
-            "B4_refl": download_single_band(mosaic, 'B4_refl', region=self.roi, scale=IMAGE_SCALE),
-            "B3_refl": download_single_band(mosaic, 'B3_refl', region=self.roi, scale=IMAGE_SCALE),
-            "B2_refl": download_single_band(mosaic, 'B2_refl', region=self.roi, scale=IMAGE_SCALE),
+            "B4_refl": download_image(image=mosaic, bands=['B4_refl'], region=self.roi, scale=IMAGE_SCALE, format="GEO_TIFF"),
+            "B3_refl": download_image(image=mosaic, bands=['B3_refl'], region=self.roi, scale=IMAGE_SCALE, format="GEO_TIFF"),
+            "B2_refl": download_image(image=mosaic, bands=['B2_refl'], region=self.roi, scale=IMAGE_SCALE, format="GEO_TIFF"),
         })
 
         return {
@@ -183,8 +190,8 @@ class PostFireAssessment:
         overlay = self._styled_roi_overlay().visualize()
         final = vis.blend(overlay)
 
-        jpeg_bytes = download_visual_image(
-            img=final,
+        jpeg_bytes = download_image(
+            image=final,
             region=self.roi,
             scale=IMAGE_SCALE,
             format="JPEG"
@@ -203,7 +210,7 @@ class PostFireAssessment:
         Downloads the resulting index as a single-band GeoTIFF and returns it as a
         deliverable object. 
         """
-        data = download_single_band(mosaic, 'ndvi', region=self.roi, scale=IMAGE_SCALE)
+        data = download_image(image=mosaic, bands=['ndvi'], region=self.roi, scale=IMAGE_SCALE, format="GEO_TIFF")
         return {
             "filename": f"{filename}.tif",
             "content_type": "image/tiff",
@@ -218,7 +225,7 @@ class PostFireAssessment:
             - rbr_visual.jpg (RBR color JPEG with rbrVis palette)
         """
         # GeoTIFF
-        image_bytes = download_single_band(rbr_img, 'rbr', region=self.roi, scale=IMAGE_SCALE)
+        image_bytes = download_image(image=rbr_img, bands=['rbr'], region=self.roi, scale=IMAGE_SCALE, format="GEO_TIFF")
         tiff_deliverable = {
             "filename": "rbr.tif",
             "content_type": "image/tiff",
