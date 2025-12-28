@@ -208,5 +208,6 @@ __marimo__/
 
 # Images generated
 *.tif
+*.tiff
 *.tif.aux.xml
 *.jpg
