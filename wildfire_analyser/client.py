@@ -46,6 +46,21 @@ def main():
         )
 
         parser.add_argument(
+            "--deliverables",
+            nargs="+",
+            help=(
+                "List of deliverables to generate. "
+                "Example: --deliverables RGB_PRE_FIRE DNBR"
+            ),
+        )
+
+        parser.add_argument(
+            "--deliverables-all",
+            action="store_true",
+            help="Generate all available deliverables"
+        )
+
+        parser.add_argument(
             "--days-before-after",
             type=int,
             default=30,
@@ -53,6 +68,42 @@ def main():
         )
 
         args = parser.parse_args()
+
+        DEFAULT_DELIVERABLES = [
+            Deliverable.RGB_PRE_FIRE,
+            Deliverable.RGB_POST_FIRE,
+            Deliverable.NBR_PRE_FIRE,
+            Deliverable.NBR_POST_FIRE,
+            Deliverable.DNBR,
+            Deliverable.RBR,
+            Deliverable.BURN_SEVERITY_MAP,
+            Deliverable.RGB_PRE_FIRE_VISUAL,
+            Deliverable.RGB_POST_FIRE_VISUAL,
+            Deliverable.DNBR_VISUAL,
+            Deliverable.BURN_SEVERITY_VISUAL,
+            Deliverable.BURNED_AREA_STATISTICS,
+        ]
+
+        if args.deliverables_all and args.deliverables:
+            raise ValueError(
+                "Use either --deliverables-all or --deliverables, not both."
+            )
+
+        if args.deliverables_all:
+            deliverables = list(Deliverable)
+
+        elif args.deliverables:
+            try:
+                deliverables = [Deliverable[name] for name in args.deliverables]
+            except KeyError as e:
+                valid = ", ".join(d.name for d in Deliverable)
+                raise ValueError(
+                    f"Invalid deliverable '{e.args[0]}'. "
+                    f"Valid options are: {valid}"
+                )
+
+        else:
+            deliverables = DEFAULT_DELIVERABLES
 
         geojson_path = Path(args.roi).expanduser().resolve()
         if not geojson_path.exists():
@@ -64,20 +115,7 @@ def main():
             start_date=args.start_date,
             end_date=args.end_date,
             days_before_after=args.days_before_after,
-            deliverables=[
-                #Deliverable.RGB_PRE_FIRE,
-                #Deliverable.RGB_POST_FIRE,
-                #Deliverable.NBR_PRE_FIRE,
-                #Deliverable.NBR_POST_FIRE,
-                #Deliverable.DNBR,
-                #Deliverable.RBR,
-                #Deliverable.BURN_SEVERITY_MAP,
-                Deliverable.RGB_PRE_FIRE_VISUAL,
-                Deliverable.RGB_POST_FIRE_VISUAL,
-                Deliverable.DNBR_VISUAL,
-                Deliverable.BURN_SEVERITY_VISUAL,
-                Deliverable.BURNED_AREA_STATISTICS,
-            ],
+            deliverables=deliverables, 
             gcs_bucket=gcs_bucket_name,
         )
 
