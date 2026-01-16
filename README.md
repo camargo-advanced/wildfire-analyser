@@ -57,7 +57,11 @@ A `.env` template is also available in the GitHub repository.
 After adding the `.env` file and your GeoJSON polygon:
 
 ```bash
-python3 -m wildfire_analyser.client --roi polygons/eejatai.geojson --start-date 2024-09-01 --end-date 2024-11-08
+python3 -m wildfire_analyser.client \
+  --roi polygons/aoi.geojson \
+  --start-date 2023-07-31 \
+  --end-date 2023-08-30 \
+  --days-before-after 1
 ```
 
 This will start the analysis process, generate the configured deliverables, and save the output files in the current directory.

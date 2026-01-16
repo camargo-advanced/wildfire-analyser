@@ -1,7 +1,7 @@
 import ee
 from pathlib import Path
 from typing import List, Dict, Any
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 
 from wildfire_analyser.fire_assessment.auth import authenticate_gee
@@ -15,6 +15,7 @@ from wildfire_analyser.fire_assessment.exporters.gcs import (
     export_geotiff_to_gcs,
     get_visual_thumbnail_url,
 )
+from wildfire_analyser.fire_assessment.dependencies import Dependency
 
 
 class PostFireAssessment:
@@ -33,6 +34,14 @@ class PostFireAssessment:
         gcs_bucket: str | None = None,
     ):
         authenticate_gee(gee_key_json)
+
+        start = self._parse_date(start_date, "start_date")
+        end = self._parse_date(end_date, "end_date")
+        if start > end:
+            raise ValueError(
+                f"start_date must be <= end_date "
+                f"(got {start_date} > {end_date})"
+            )
 
         self.roi = self._load_geojson(Path(geojson_path))
         self.deliverables = deliverables
@@ -53,6 +62,7 @@ class PostFireAssessment:
             "scientific": {},
             "visual": {},
             "statistics": {},
+            "provenance": {},
         }
 
         for d, value in outputs.items():
@@ -85,6 +95,21 @@ class PostFireAssessment:
 
                 result["scientific"][d.name] = {"url": url}
 
+        # Provenance (image IDs, dates, cloud %)
+        pre_collection = self.context.get(Dependency.PRE_FIRE_COLLECTION)
+        post_collection = self.context.get(Dependency.POST_FIRE_COLLECTION)
+
+        result["provenance"] = {
+            "pre_fire": {
+                "images": self._extract_collection_provenance(pre_collection)
+                if pre_collection is not None else []
+            },
+            "post_fire": {
+                "images": self._extract_collection_provenance(post_collection)
+                if post_collection is not None else []
+            },
+        }
+
         return result
 
     @staticmethod
@@ -111,3 +136,39 @@ class PostFireAssessment:
 
         return f"{deliverable}_{start_norm}_{end_norm}_{ts}_{uid}"
         
+    @staticmethod
+    def _parse_date(value: str, field_name: str) -> date:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError as e:
+            raise ValueError(
+                f"{field_name} must be in YYYY-MM-DD format (got '{value}')"
+            ) from e
+
+    @staticmethod
+    def _extract_collection_provenance(
+        collection: ee.ImageCollection,
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract ordered image provenance from an ImageCollection.
+
+        The order reflects the ImageCollection internal ordering
+        (i.e., sorted by CLOUDY_PIXEL_PERCENTAGE).
+        """
+        def to_feature(img):
+            return ee.Feature(
+                None,
+                {
+                    "id": img.get("system:id"),
+                    "date": ee.Date(
+                        img.get("system:time_start")
+                    ).format("YYYY-MM-dd"),
+                    "cloud_percent": img.get("CLOUDY_PIXEL_PERCENTAGE"),
+                },
+            )
+
+        feature_collection = ee.FeatureCollection(collection.map(to_feature))
+
+        features = feature_collection.getInfo()["features"]
+
+        return [f["properties"] for f in features]

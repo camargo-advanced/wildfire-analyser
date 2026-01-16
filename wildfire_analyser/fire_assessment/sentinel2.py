@@ -37,5 +37,5 @@ def gather_collection(
         .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_threshold))
         .map(_mask_s2_clouds)
         .map(_add_reflectance_bands)
-        .sort("CLOUDY_PIXEL_PERCENTAGE", False)
+        .sort("CLOUDY_PIXEL_PERCENTAGE", True)
     )

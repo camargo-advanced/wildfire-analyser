@@ -39,7 +39,7 @@ def build_pre_fire_collection(context):
 
     start_date = context.inputs["start_date"]
     end_date = context.inputs["end_date"]
-    days = context.inputs.get("days_before_after", 30)
+    days = context.inputs.get("days_before_after")
 
     before_start, before_end, _, _ = compute_fire_time_windows(
         start_date, end_date, days
@@ -56,7 +56,7 @@ def build_post_fire_collection(context):
 
     start_date = context.inputs["start_date"]
     end_date = context.inputs["end_date"]
-    days = context.inputs.get("days_before_after", 30)
+    days = context.inputs.get("days_before_after")
 
     _, _, after_start, after_end = compute_fire_time_windows(
         start_date, end_date, days
