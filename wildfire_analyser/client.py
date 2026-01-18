@@ -334,7 +334,12 @@ def main():
         if result["scientific"]:
             logger.info("Scientific outputs:")
             for name, item in result["scientific"].items():
-                logger.info("  %s -> %s", name, item["url"])
+                logger.info(
+                    "  %s -> %s (gee_task_id=%s)",
+                    name,
+                    item["url"],
+                    item.get("gee_task_id"),
+                )
 
         logger.info("Visual outputs:")
         for name, item in result["visual"].items():

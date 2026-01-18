@@ -8,7 +8,7 @@ def export_geotiff_to_gcs(
     object_name: str,
     scale: int = 10,
     max_pixels: int = 1e13,
-) -> str:
+) -> dict:
     task = ee.batch.Export.image.toCloudStorage(
         image=image,
         description=object_name,
@@ -21,8 +21,10 @@ def export_geotiff_to_gcs(
     )
     task.start()
 
-    return f"https://storage.googleapis.com/{bucket}/{object_name}.tif"
-
+    return {
+        "url": f"https://storage.googleapis.com/{bucket}/{object_name}.tif",
+        "gee_task_id": task.id,
+    }
 
 def get_visual_thumbnail_url(
     image: ee.Image,

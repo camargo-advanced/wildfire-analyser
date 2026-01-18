@@ -91,7 +91,7 @@ class PostFireAssessment:
                     end_date=self.context.inputs["end_date"],
                 )
 
-                url = export_geotiff_to_gcs(
+                export_result = export_geotiff_to_gcs(
                     image=value,
                     roi=self.roi,
                     bucket=self.bucket,
@@ -99,7 +99,10 @@ class PostFireAssessment:
                     scale=self.DEFAULT_SCALE,
                 )
 
-                result["scientific"][d.name] = {"url": url}
+                result["scientific"][d.name] = {
+                    "url": export_result["url"],
+                    "gee_task_id": export_result["gee_task_id"],
+                }
 
         # Provenance (image IDs, dates, cloud %)
         pre_collection = self.context.get(Dependency.PRE_FIRE_COLLECTION)
