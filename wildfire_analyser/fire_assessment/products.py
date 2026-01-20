@@ -23,7 +23,7 @@ def register(dep: Dependency):
 @register(Dependency.COLLECTION_GATHERING)
 def gather_collection_node(context):
     roi = context.inputs["roi"]
-    cloud_threshold = context.inputs.get("cloud_threshold", 70)
+    cloud_threshold = context.inputs.get("cloud_threshold")
 
     return gather_collection(
         roi=roi,

@@ -209,6 +209,16 @@ def main():
             help="Number of days before and after the event date (default: 30)",
         )
 
+        parser.add_argument(
+            "--cloud-threshold",
+            type=int,
+            default=70,
+            help=(
+                "Maximum allowed CLOUDY_PIXEL_PERCENTAGE for Sentinel-2 scenes "
+                "(default: 70). Higher values include more cloudy scenes."
+            ),
+        )
+
         args = parser.parse_args()
 
         # ─────────────────────────────
@@ -247,6 +257,7 @@ def main():
                     start_date=cfg["start_date"],
                     end_date=cfg["end_date"],
                     days_before_after=cfg["days_before_after"],
+                    cloud_threshold=args.cloud_threshold, 
                     deliverables=preset["deliverables"],
                     gcs_bucket=gcs_bucket_name,
                     verbose=True,
@@ -324,12 +335,37 @@ def main():
             start_date=args.start_date,
             end_date=args.end_date,
             days_before_after=args.days_before_after,
+            cloud_threshold=args.cloud_threshold, 
             deliverables=deliverables,
             gcs_bucket=gcs_bucket_name,
             verbose=True,
         )
 
         result = runner.run()
+
+        # ─────────────────────────────
+        # Provenance (GEE images used)
+        # ─────────────────────────────
+
+        prov = result.get("provenance", {})
+
+        logger.info("Pre-fire images used:")
+        for img in prov.get("pre_fire", {}).get("images", []):
+            logger.info(
+                "  %s | %s | cloud=%.1f",
+                img["date"],
+                img["id"],
+                img["cloud_percent"],
+            )
+
+        logger.info("Post-fire images used:")
+        for img in prov.get("post_fire", {}).get("images", []):
+            logger.info(
+                "  %s | %s | cloud=%.1f",
+                img["date"],
+                img["id"],
+                img["cloud_percent"],
+            )
 
         if result["scientific"]:
             logger.info("Scientific outputs:")
