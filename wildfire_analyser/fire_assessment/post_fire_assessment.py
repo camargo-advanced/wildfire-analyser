@@ -13,6 +13,8 @@ from wildfire_analyser.fire_assessment.deliverables import Deliverable
 from wildfire_analyser.fire_assessment.visualization import VISUAL_RENDERERS
 from wildfire_analyser.fire_assessment.exporters.gcs import (
     export_geotiff_to_gcs,
+)
+from wildfire_analyser.fire_assessment.visualization import (
     get_visual_thumbnail_url,
 )
 from wildfire_analyser.fire_assessment.dependencies import Dependency

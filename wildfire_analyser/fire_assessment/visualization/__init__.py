@@ -10,6 +10,7 @@ from wildfire_analyser.fire_assessment.visualization.dnbr_severity import (
 )
 from wildfire_analyser.fire_assessment.visualization.rbr import rbr_visual
 from wildfire_analyser.fire_assessment.visualization.dndvi import dndvi_visual
+from .thumbnails import get_visual_thumbnail_url
 
 VISUAL_RENDERERS = {
     Deliverable.RGB_PRE_FIRE_VISUAL: rgb_pre_fire_visual,
@@ -18,3 +19,7 @@ VISUAL_RENDERERS = {
     Deliverable.DNBR_VISUAL: dnbr_visual,
     Deliverable.RBR_VISUAL: rbr_visual,
 }
+
+__all__ = [
+    "get_visual_thumbnail_url",
+]
