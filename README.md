@@ -1,10 +1,44 @@
-# wildfire-analyser
+<!--
+SPDX-License-Identifier: MIT
 
-Python project for **post-fire assessment and burned area analysis** using **Sentinel-2 imagery** and **Google Earth Engine (GEE)**.
+wildfire-analyser
+=================
 
-This project supports multiple spectral indices (**dNBR, dNDVI, RBR**), visual products, and paper-ready burned area statistics.
+An open-source Python pipeline for post-fire assessment and burned area
+analysis using Sentinel-2 imagery and Google Earth Engine (GEE).
 
----
+This project provides a reproducible, automated workflow for computing
+fire-related spectral indices, generating visual products, and producing 
+burned area statistics for scientific and operational use.
+
+The library is designed with a clear separation between:
+- Scientific computation (core library)
+- Dependency-driven execution (DAG)
+- Command-line interfaces (CLI tools)
+
+Copyright (C) 2025
+Marcelo Camargo.
+
+Licensed under the MIT License. See the LICENSE file for details.
+-->
+
+## Project Architecture (Overview)
+
+The wildfire-analyser project is organized into three conceptual layers:
+
+- **Core library (`fire_assessment`)**  
+  Implements scientific computation, dependency resolution, and Earth Engine logic.
+
+- **Execution layer (DAG)**  
+  Automatically resolves and executes dependencies required for each deliverable.
+
+- **Command-line interfaces (CLI)**  
+  User-facing tools for running analyses and monitoring Earth Engine tasks.
+
+## Outputs
+
+All generated outputs (GeoTIFFs, thumbnails, statistics) are considered
+runtime artifacts and are not committed to version control.
 
 ## Scientific Background
 
@@ -81,7 +115,7 @@ A `.env.template` file is available in the repository.
 After adding the `.env` file and your GeoJSON polygon:
 
 ```bash
-python3 -m wildfire_analyser.client \
+python3 -m wildfire_analyser.cli \
   --roi polygons/canakkale_aoi_1.geojson \
   --start-date 2023-07-01 \
   --end-date 2023-07-21 \
@@ -139,7 +173,7 @@ You may explicitly select deliverables using `--deliverables`.
 Example:
 
 ```bash
-python3 -m wildfire_analyser.client \
+python3 -m wildfire_analyser.cli \
    --roi polygons/canakkale_aoi_1.geojson \
    --start-date 2023-07-01 \
    --end-date 2023-07-21 \
@@ -160,7 +194,7 @@ The client also supports **paper presets**, which are predefined experimental co
 Run:
 
 ```bash
-python3 -m wildfire_analyser.client \
+python3 -m wildfire_analyser.cli \
   --deliverables PAPER_DENIZ_FUSUN_RAMAZAN
 ```
 
@@ -186,78 +220,5 @@ Internally, it runs:
 For help and full usage information:
 
 ```bash
-python3 -m wildfire_analyser.client --help
+python3 -m wildfire_analyser.cli --help
 ```
-
----
-
-## Setup Instructions for Developers
-
-1. **Clone the repository**
-
-```bash
-git clone git@github.com:camargo-advanced/wildfire-analyser.git
-cd wildfire-analyser
-```
-
-2. **Create a virtual environment**
-
-```bash
-python3 -m venv venv
-```
-
-3. **Activate the virtual environment**
-
-```bash
-source venv/bin/activate
-```
-
-4. **Install dependencies**
-
-```bash
-pip install -r requirements.txt
-```
-
-5. **Configure environment variables**
-
-Copy your `.env` file to the project root.
-A `.env.template` file is provided.
-
-6. **Run the sample client**
-
-```bash
-python3 -m wildfire_analyser.client \
-   --roi polygons/canakkale_aoi_1.geojson \
-   --start-date 2023-07-01 \
-   --end-date 2023-07-21 \
-   --days-before-after 1
-```
-
----
-
-## Useful Commands
-
-### Deactivate the virtual environment
-
-```bash
-deactivate
-```
-
-### Build and publish a new PyPI release
-
-```bash
-rm -rf dist/*
-python -m build
-twine upload dist/*
-```
-
----
-
-## Citation
-
-If you use this software for scientific work, please cite:
-
-> *Spatial and statistical analysis of burned areas with Landsat-8/9 and Sentinel-2 satellites: 2023 Çanakkale forest fires*
-> Deniz Bitek, Fusun Balik Sanli, Ramazan Cuneyt Erenoglu.
-
-And cite this repository as the reference implementation.

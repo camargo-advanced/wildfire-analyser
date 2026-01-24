@@ -1,3 +1,32 @@
+# SPDX-License-Identifier: MIT
+#
+# Post-fire assessment pipeline orchestration.
+#
+# This module implements the high-level orchestration logic for post-fire
+# assessment workflows using Google Earth Engine (GEE). It coordinates the
+# execution of a dependency-based processing DAG, collects scientific,
+# statistical, and visualization deliverables, and exposes results in a
+# structured form suitable for CLI and programmatic use.
+#
+# Responsibilities of this module:
+# - Authenticate and initialize Earth Engine access.
+# - Validate user inputs (dates, ROI).
+# - Execute the processing DAG for requested deliverables.
+# - Dispatch results to visualization, statistics, or export paths.
+# - Aggregate provenance metadata for traceability.
+#
+# This module does NOT:
+# - Implement scientific algorithms (see products.py).
+# - Perform visualization rendering logic (see visualization/).
+# - Handle storage backends beyond dispatching exports.
+#
+# Copyright (C) 2025
+# Marcelo Camargo
+#
+# This file is part of wildfire-analyser and is distributed under the terms
+# of the MIT license. See the LICENSE file for details.
+ 
+
 import ee
 from pathlib import Path
 from typing import List, Dict, Any
@@ -179,7 +208,6 @@ class PostFireAssessment:
             )
 
         feature_collection = ee.FeatureCollection(collection.map(to_feature))
-
         features = feature_collection.getInfo()["features"]
 
         return [f["properties"] for f in features]

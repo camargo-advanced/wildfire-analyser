@@ -1,3 +1,38 @@
+# ------------------------------------------------------------------------------
+# Git ignore rules for wildfire-analyser
+#
+# This file defines files and directories that should be excluded from version
+# control to keep the repository clean, secure, and portable across different
+# environments.
+#
+# It covers:
+# - Python build artifacts and bytecode
+# - Virtual environments and dependency managers
+# - Test, coverage, and cache outputs
+# - IDE and editor-specific metadata
+# - Temporary files and generated assets
+# - Sensitive configuration and credentials
+#
+# Security note:
+# - Environment files (e.g. .env) and credential-related artifacts are
+#   intentionally ignored to prevent accidental leakage of secrets.
+#
+# Project note:
+# - Generated scientific outputs (e.g. GeoTIFFs, JPEG previews) are excluded
+#   by default and should be produced programmatically by the pipeline.
+#
+# This file follows common community conventions and incorporates templates
+# from the official GitHub gitignore repository, adapted to the needs of this
+# project.
+#
+# Copyright (C) 2025
+# Marcelo Camargo.
+#
+# This file is part of wildfire-analyser and is distributed under the terms
+# of the MIT license. See the LICENSE file for details.
+# ------------------------------------------------------------------------------
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

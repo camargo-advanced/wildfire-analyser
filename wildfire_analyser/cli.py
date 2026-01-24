@@ -1,12 +1,50 @@
+# SPDX-License-Identifier: MIT
+#
+# Command-line interface (CLI) entry point for wildfire-analyser.
+#
+# This module implements the command-line client used to run post-fire
+# assessments using the wildfire-analyser pipeline. It is responsible for
+# parsing user input, loading environment configuration, invoking the
+# pipeline runner, and presenting results to the user.
+#
+# The CLI supports two execution modes:
+# - Normal mode: user-specified ROI, dates, and deliverables.
+# - Paper preset mode: predefined configurations used to reproduce and
+#   validate results reported in scientific publications.
+#
+# Design notes:
+# - This file acts as an application layer, not a library component.
+# - Logging configuration is handled here to keep the core library silent
+#   by default.
+# - All scientific processing is delegated to fire_assessment modules.
+#
+# Responsibilities of this module:
+# - Parse and validate command-line arguments.
+# - Load environment variables and credentials.
+# - Orchestrate pipeline execution via PostFireAssessment.
+# - Format and report outputs for human consumption.
+#
+# This module does NOT:
+# - Implement scientific algorithms or Earth Engine logic.
+# - Define processing dependencies or DAG structure.
+# - Provide reusable library APIs.
+#
+# Copyright (C) 2025
+# Marcelo Camargo.
+#
+# This file is part of wildfire-analyser and is distributed under the terms
+# of the MIT license. See the LICENSE file for details.
+
+
 import logging
 import os
+import sys
 from dotenv import load_dotenv
 import argparse
 from pathlib import Path
 
 from wildfire_analyser.fire_assessment.post_fire_assessment import PostFireAssessment
 from wildfire_analyser.fire_assessment.deliverables import Deliverable
-
 
 # ─────────────────────────────
 # Logging setup
@@ -136,6 +174,7 @@ PAPER_TABLE_7_STATS = {
     },
 }
 
+
 def compare_with_paper_table_7(computed: dict, reference: dict):
     """
     Compare computed area statistics with Table 7 reference values.
@@ -172,8 +211,8 @@ def compare_with_paper_table_7(computed: dict, reference: dict):
 # Main
 # ─────────────────────────────
 
+
 def main():
-    try:
         load_dotenv()
 
         gee_key_json = os.getenv("GEE_PRIVATE_KEY_JSON")
@@ -257,7 +296,7 @@ def main():
                     start_date=cfg["start_date"],
                     end_date=cfg["end_date"],
                     days_before_after=cfg["days_before_after"],
-                    cloud_threshold=args.cloud_threshold, 
+                    cloud_threshold=args.cloud_threshold,
                     deliverables=preset["deliverables"],
                     gcs_bucket=gcs_bucket_name,
                     verbose=True,
@@ -278,7 +317,8 @@ def main():
                     )
 
                     if paper_ref:
-                        stat_value = compare_with_paper_table_7(stat_value, paper_ref)
+                        stat_value = compare_with_paper_table_7(
+                            stat_value, paper_ref)
 
                     logger.info("  %s:", stat_name)
 
@@ -311,14 +351,8 @@ def main():
         # ─────────────────────────────
 
         if args.deliverables:
-            try:
-                deliverables = [Deliverable[name.upper()] for name in args.deliverables]
-            except KeyError as e:
-                valid = ", ".join(d.name for d in Deliverable)
-                raise ValueError(
-                    f"Invalid deliverable '{e.args[0]}'. "
-                    f"Valid options are: {valid}"
-                )
+            deliverables = [Deliverable[name.upper()]
+                            for name in args.deliverables]
         else:
             deliverables = list(Deliverable)
 
@@ -335,8 +369,8 @@ def main():
             start_date=args.start_date,
             end_date=args.end_date,
             days_before_after=args.days_before_after,
-            cloud_threshold=args.cloud_threshold, 
-            deliverables=deliverables,
+            cloud_threshold=args.cloud_threshold,
+            deliverables=deliverables, 
             gcs_bucket=gcs_bucket_name,
             verbose=True,
         )
@@ -392,10 +426,17 @@ def main():
                     values["ratio_percent"],
                 )
 
-    except (ValueError, FileNotFoundError, RuntimeError) as e:
-        logger.error(str(e))
-        raise SystemExit(2)
-
 
 if __name__ == "__main__":
-    main()
+    
+    ERROR_MSG = (
+        "\nERROR: Unable to process the request with the provided parameters.\n"
+        "Please check the selected time period, input files, and arguments, and try again.\n"
+    )
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        print(ERROR_MSG)
+        sys.exit(2)

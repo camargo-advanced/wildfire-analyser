@@ -1,7 +1,37 @@
-# python3 -m wildfire_analyser.gee_task_monitor \
-#   --gee-task-id GWPUZIDAD4TGMXCLWOJNBRFT \
-#   --deliverable DNBR \
-#   --user-email user@email.com
+# SPDX-License-Identifier: MIT
+#
+# Google Earth Engine task monitoring CLI.
+#
+# This module implements a lightweight command-line utility for monitoring
+# asynchronous Google Earth Engine (GEE) tasks, such as image exports, until
+# completion.
+#
+# It is intended to be used as a companion tool to the main wildfire-analyser
+# pipeline, allowing users to track long-running Earth Engine jobs executed
+# outside the interactive CLI flow.
+#
+# Design notes:
+# - This module operates purely as a polling client for GEE task status.
+# - It does not submit, cancel, or modify Earth Engine tasks.
+# - Polling is performed at a fixed interval to balance responsiveness
+#   and API usage.
+#
+# Responsibilities of this module:
+# - Authenticate with Google Earth Engine.
+# - Poll task status until completion or failure.
+# - Report task state transitions to the user.
+#
+# This module does NOT:
+# - Execute scientific processing or pipeline logic.
+# - Interact with Google Cloud Storage directly.
+# - Send notifications or emails (future extension).
+#
+# Copyright (C) 2025
+# Marcelo Camargo.
+#
+# This file is part of wildfire-analyser and is distributed under the terms
+# of the MIT license. See the LICENSE file for details.
+
 
 import argparse
 import time
@@ -38,20 +68,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Monitor a Google Earth Engine task until completion"
     )
-
     parser.add_argument("--gee-task-id", required=True)
-    parser.add_argument("--deliverable", required=True)
-    parser.add_argument("--user-email", required=True)
-
     args = parser.parse_args()
 
     authenticate_gee()
-
     wait_for_task(args.gee_task_id)
-
     print(f"Deliverable '{args.deliverable}' completed.")
-    print(f"User: {args.user_email}")
-    print("Email sending not implemented yet.")
 
 
 if __name__ == "__main__":

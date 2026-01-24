@@ -1,3 +1,38 @@
+# SPDX-License-Identifier: MIT
+#
+# Processing node implementations for the fire assessment pipeline.
+#
+# This module defines the concrete execution logic for each internal pipeline
+# dependency. Each function registered here represents a processing node in
+# the dependency graph and corresponds to a single, well-defined computation
+# step executed on Google Earth Engine.
+#
+# Nodes are registered via the @register decorator and are executed lazily
+# according to the dependency resolution performed by the DAG resolver.
+#
+# Design notes:
+# - Each node consumes inputs from the DAG execution context.
+# - Nodes must be deterministic and free of side effects.
+# - Earth Engine execution is deferred until a terminal operation
+#   (e.g. getInfo(), export, or thumbnail generation) is triggered.
+#
+# Responsibilities of this module:
+# - Implement all pipeline processing steps.
+# - Register execution functions for each Dependency.
+# - Encapsulate Earth Engine computation logic.
+#
+# This module does NOT:
+# - Define dependency relationships (see dependency_graph.py).
+# - Define user-facing deliverables (see deliverables.py).
+# - Control execution order or scheduling.
+#
+# Copyright (C) 2025
+# Marcelo Camargo.
+#
+# This file is part of wildfire-analyser and is distributed under the terms
+# of the MIT license. See the LICENSE file for details.
+
+
 from typing import Callable, Dict, Any
 import ee
 
@@ -86,6 +121,7 @@ def build_post_fire_mosaic(context):
 
     return post_collection.mosaic()
 
+
 @register(Dependency.RGB_PRE_FIRE)
 def build_rgb_pre_fire(context):
     """
@@ -101,6 +137,7 @@ def build_rgb_pre_fire(context):
     )
 
     return rgb
+
 
 @register(Dependency.RGB_POST_FIRE)
 def build_rgb_post_fire(context):
@@ -177,6 +214,7 @@ def compute_nbr_pre_fire(context):
 
     return nbr
 
+
 @register(Dependency.NBR_POST_FIRE)
 def compute_nbr_post_fire(context):
     """
@@ -195,6 +233,7 @@ def compute_nbr_post_fire(context):
 # ─────────────────────────────
 # Stage 3 – DNBR
 # ─────────────────────────────
+
 
 @register(Dependency.DNBR)
 def compute_dnbr(context):
@@ -216,6 +255,7 @@ def compute_dnbr(context):
 # Stage 4 – RBR
 # ─────────────────────────────
 
+
 @register(Dependency.RBR)
 def compute_rbr(context):
     """
@@ -234,10 +274,11 @@ def compute_rbr(context):
     ).rename("rbr")
 
     return rbr
-    
+
 # ─────────────────────────────
 # Stage 5 – STATISTICS
 # ─────────────────────────────
+
 
 SEVERITY_LABELS = {
     0: "Unburned",
@@ -281,6 +322,7 @@ def format_area_statistics(stats):
 
     return result
 
+
 def compute_area_stats(severity: ee.Image, roi: ee.Geometry):
     pixel_area = ee.Image.pixelArea().divide(10_000)  # m² → ha
 
@@ -305,6 +347,7 @@ def compute_area_stats(severity: ee.Image, roi: ee.Geometry):
 
     return format_area_statistics(stats)
 
+
 @register(Dependency.DNBR_AREA_STATISTICS)
 def compute_dnbr_area_statistics(context):
     dnbr = context.get(Dependency.DNBR)
@@ -325,6 +368,7 @@ def compute_dnbr_area_statistics(context):
 
     return compute_area_stats(severity, roi)
 
+
 @register(Dependency.DNDVI_AREA_STATISTICS)
 def compute_dndvi_area_statistics(context):
     dndvi = context.get(Dependency.DNDVI)
@@ -343,6 +387,7 @@ def compute_dndvi_area_statistics(context):
     )
 
     return compute_area_stats(severity, roi)
+
 
 @register(Dependency.RBR_AREA_STATISTICS)
 def compute_rbr_area_statistics(context):

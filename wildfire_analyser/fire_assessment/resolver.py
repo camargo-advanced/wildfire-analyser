@@ -1,4 +1,37 @@
-# wildfire_analyser/fire_assessment/resolver.py
+# SPDX-License-Identifier: MIT
+#
+# DAG execution engine for the fire assessment pipeline.
+#
+# This module orchestrates the execution of the fire assessment pipeline by
+# resolving requested deliverables into their underlying dependencies and
+# executing them as a directed acyclic graph (DAG).
+#
+# The resolver maps user-facing deliverables to internal processing
+# dependencies, determines the correct execution order, executes each
+# dependency exactly once, and collects the final results.
+#
+# Design notes:
+# - Execution is dependency-driven, not deliverable-driven.
+# - Intermediate results are cached in the execution context to avoid
+#   redundant Earth Engine computation.
+# - Dependencies are executed lazily and only when required.
+#
+# Responsibilities of this module:
+# - Translate deliverables into dependency execution plans.
+# - Coordinate DAG execution using the dependency resolver.
+# - Manage shared execution context and result caching.
+#
+# This module does NOT:
+# - Define dependency relationships (see dependency_graph.py).
+# - Implement processing logic (see products.py).
+# - Perform authentication or I/O operations.
+#
+# Copyright (C) 2025
+# Marcelo Camargo.
+#
+# This file is part of wildfire-analyser and is distributed under the terms
+# of the MIT license. See the LICENSE file for details.
+
 
 from typing import Dict, Iterable, Any, List
 
@@ -56,7 +89,8 @@ def execute_dag(
     for deliverable in deliverables:
         deps = DELIVERABLE_DEPENDENCIES.get(deliverable)
         if deps is None:
-            raise KeyError(f"No dependencies defined for deliverable {deliverable}")
+            raise KeyError(
+                f"No dependencies defined for deliverable {deliverable}")
         requested_dependencies.extend(deps)
 
     # 2. Resolve full dependency order
@@ -71,7 +105,8 @@ def execute_dag(
 
         executor = PRODUCT_REGISTRY.get(dep)
         if executor is None:
-            raise KeyError(f"No product executor registered for dependency {dep}")
+            raise KeyError(
+                f"No product executor registered for dependency {dep}")
 
         result = executor(context)
         context.set(dep, result)
