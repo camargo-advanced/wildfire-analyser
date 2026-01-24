@@ -111,7 +111,7 @@ A `.env.template` file is available in the repository.
 
 ## Running the Client (Standard Mode)
 
-After adding the `.env` file and your GeoJSON polygon:
+After adding the `.env` file and your GeoJSON polygon. Please update your GEE service account key and the bucket name in the `.env` file.
 
 ```bash
 python3 -m wildfire_analyser.cli \

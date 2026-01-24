@@ -21,7 +21,6 @@ This guide explains, step by step, how to:
 2. At the top of the page, open the project selector.
 
 3. You may:
-   - **Use an existing project**, or  
    - Click **“New Project”** and create one:
      - Name example: `post-fire-assessment`
      - Choose the appropriate organization (if applicable)
@@ -112,11 +111,6 @@ During the registration process, you will be asked to select your **organization
 > Choosing ***For-profit*** may result in usage charges or billing requirements.
 > Make sure to select the option that accurately reflects the nature of your organization and project.
 
-### Notes
-
-* Use the same Google account that will authenticate your Earth Engine API access.
-* Ensure billing is properly set up in your Google Cloud project if required.
-
 ## 6. Create a Cloud Storage Bucket
 
 1. Go to:  
@@ -125,14 +119,16 @@ During the registration process, you will be asked to select your **organization
 2. Click **“Create Bucket”**
 
 3. Configure:
-   - **Bucket name**: e.g., `wildfire-analyser-outputs`  
+   - **Bucket name**: e.g., `wildfire-analyser-outputs` and press continue .
      (must be globally unique)
-   - **Region**: choose as appropriate (e.g., `us-central1`)
-   - **Storage class**: Nearline (default or Standard, depending on your needs)
+   - **Region**: choose as appropriate (e.g., `us-central1`) and press continue.
+   - **Storage class**: Nearline (default or Standard, depending on your needs) and press continue.
 
 4. Leave other settings as default unless you have specific requirements.
 
 5. Click **Create**
+
+6. Desmarque a opção "Aplicar a prevenção de acesso público a esses bucket" e confirme no popup que aparece.
 
 > **Important note about billing and free tier:**  
 > When you create your first bucket or project, Google Cloud may ask you to add a **credit card** for billing verification.  
@@ -155,7 +151,7 @@ To allow Google Earth Engine (GEE) export tasks — and Python scripts using GEE
 4. In **New principals**, add the service account email:
 
    ```
-   gee-service-account@post-fire-assessment.iam.gserviceaccount.com
+   your service account here in the format: gee-service-account@post-fire-assessment.iam.gserviceaccount.com
 
    ```
 
@@ -166,8 +162,31 @@ To allow Google Earth Engine (GEE) export tasks — and Python scripts using GEE
    ```
 
    *(or `Storage Object Creator` if you want to restrict permissions to write-only access)*
+   
 
 6. Click **Save** to apply the changes.
+
+
+7. Again, Open the bucket you created (for example, `wildfire-analyser-outputs`).
+
+8. Go to the **Permissions** tab.
+
+9. Click **Grant access**.
+
+10. In **New principals**, add the service account email:
+
+   ```
+   All Users
+
+   ```
+
+11. In **Role**, select:
+
+   ```
+   Storage Object Viewer
+   ```
+
+12. Click **Save** to apply the changes.
 
 ---
 
