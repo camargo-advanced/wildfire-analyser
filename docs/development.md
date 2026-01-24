@@ -28,7 +28,7 @@ that produces:
 ### 1. Clone the repository
 
 ```bash
-git clone git@github.com:camargo-advanced/wildfire-analyser.git
+git clone git@github.com:Brazil-Flying-Labs/wildfire-analyser.git
 cd wildfire-analyser
 ````
 
@@ -57,8 +57,6 @@ Install all dependencies required for local development and testing:
 ```bash
 pip install -r requirements.txt
 ```
-
-> End users installing via PyPI do **not** need this step.
 
 ---
 
@@ -109,10 +107,11 @@ python3 -m wildfire_analyser.cli \
   --roi polygons/canakkale_aoi_1.geojson \
   --start-date 2023-07-01 \
   --end-date 2023-07-21 \
+  --deliverables \
+    DNBR_VISUAL \
+    DNBR_AREA_STATISTICS \
   --days-before-after 1
 ```
-
-You may explicitly select deliverables using the `--deliverables` flag.
 
 ---
 
@@ -190,17 +189,31 @@ deactivate
 
 ---
 
+Claro — ajustei o texto para **inglês correto, tom profissional e padrão de projeto Python**, mantendo simples e claro.
+
+---
+
 ### Build and publish a new PyPI release
 
 > This step is intended for project maintainers only.
 
+1. **Ensure your PyPI credentials are properly configured**
+   (for example, using `~/.pypirc`).
+
+2. **Update the project version** in `pyproject.toml`.
+
+3. **Build the distribution packages:**
+
 ```bash
 rm -rf dist/*
 python -m build
-twine upload dist/*
 ```
 
-Ensure your PyPI credentials are configured (e.g. via `~/.pypirc`).
+4. **Upload the packages to PyPI:**
+
+```bash
+twine upload dist/*
+```
 
 ---
 
@@ -221,19 +234,3 @@ Please also cite this repository as the reference implementation.
 This project is released under the **MIT License**.
 See the `LICENSE` file for details.
 
-```
-
----
-
-## Status
-
-- ✔️ Consistente com o novo `cli.py`
-- ✔️ Alinhado com deliverables científicos, visuais e estatísticos
-- ✔️ Adequado para projeto científico open-source
-- ✔️ Pronto para GitHub + PyPI + colaboração externa
-
-Se quiser, no próximo passo posso:
-- escrever um `CONTRIBUTING.md`
-- revisar `requirements.txt` vs `pyproject.toml`
-- ou sugerir uma estrutura final para `/docs` completa
-```

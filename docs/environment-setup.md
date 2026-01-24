@@ -23,7 +23,7 @@ This guide explains, step by step, how to:
 3. You may:
    - **Use an existing project**, or  
    - Click **“New Project”** and create one:
-     - Name example: `wildfire-assessment-geospatial`
+     - Name example: `post-fire-assessment`
      - Choose the appropriate organization (if applicable)
      - Click **Create**
 
@@ -55,7 +55,7 @@ Both are required for scripts that use GEE and export data to Cloud Storage.
    - **Service account name**: e.g., `gee-service-account`
    - **Description**: “Service account for Google Earth Engine scripts”
    - The service account email will look like:  
-     `gee-service-account@wildfire-assessment.iam.gserviceaccount.com`
+     `gee-service-account@post-fire-assessment.iam.gserviceaccount.com`
 
 4. Click **Create and Continue**
 
@@ -81,7 +81,7 @@ Keep the service account email handy—we will use it to assign bucket permissio
 
 5. Click **Create**  
    A `.json` key file will be downloaded, e.g.:
-   `wildfire-assessment-gee-service-account.json`
+   `post-fire-assessment-gee-service-account.json`
 
 > **Important:**  
 > - Keep this file secure.  
@@ -89,7 +89,35 @@ Keep the service account email handy—we will use it to assign bucket permissio
 
 ---
 
-## 5. Create a Cloud Storage Bucket
+## 5. Configure and Register Google Earth Engine (GEE)
+
+To use Google Earth Engine, you must first register your Google Cloud account.
+
+### Steps
+
+1. Go to **Google Cloud Console**.
+2. In the left sidebar, click **View all products** (at the bottom of the menu).
+3. Select **Earth Engine** under the **Geospatial** section.
+4. Open **Configuration** and click **Manage registration**.
+5. Complete the registration form by answering all required questions.
+6. Submit the form and wait for approval.
+
+### Important note about organization type
+
+During the registration process, you will be asked to select your **organization type**.
+
+* **Select *Non-profit*** if the project is developed or used by a non-profit organization (for example, NGOs, research groups, or social impact initiatives).
+* **Select *For-profit*** only if the project is commercial or associated with a for-profit company.
+
+> Choosing ***For-profit*** may result in usage charges or billing requirements.
+> Make sure to select the option that accurately reflects the nature of your organization and project.
+
+### Notes
+
+* Use the same Google account that will authenticate your Earth Engine API access.
+* Ensure billing is properly set up in your Google Cloud project if required.
+
+## 6. Create a Cloud Storage Bucket
 
 1. Go to:  
    https://console.cloud.google.com/storage/browser
@@ -97,7 +125,7 @@ Keep the service account email handy—we will use it to assign bucket permissio
 2. Click **“Create Bucket”**
 
 3. Configure:
-   - **Bucket name**: e.g., `post-fire-assessment-data`  
+   - **Bucket name**: e.g., `wildfire-analyser-outputs`  
      (must be globally unique)
    - **Region**: choose as appropriate (e.g., `us-central1`)
    - **Storage class**: Nearline (default or Standard, depending on your needs)
@@ -112,13 +140,38 @@ Keep the service account email handy—we will use it to assign bucket permissio
 > - As long as you stay within the **free tier limits** and do not enable or use paid resources beyond that, **you will not be charged**.  
 > - You can monitor usage and costs in **Billing → Reports** in the Google Cloud Console and set **budgets/alerts** to avoid unexpected charges.
 
+## 7. Grant the Service Account Permission to Write to the Bucket
+
+To allow Google Earth Engine (GEE) export tasks — and Python scripts using GEE — to write data to the bucket, you must grant the appropriate permissions to the service account.
+
+### Steps
+
+1. Open the bucket you created (for example, `wildfire-analyser-outputs`).
+
+2. Go to the **Permissions** tab.
+
+3. Click **Grant access**.
+
+4. In **New principals**, add the service account email:
+
+   ```
+   gee-service-account@post-fire-assessment.iam.gserviceaccount.com
+
+   ```
+
+5. In **Role**, select:
+
+   ```
+   Storage Object Admin
+   ```
+
+   *(or `Storage Object Creator` if you want to restrict permissions to write-only access)*
+
+6. Click **Save** to apply the changes.
+
 ---
 
-## 6. Grant the Service Account Permission to Write to the Bucket
+### Notes
 
-To allow GEE export tasks (and Python scripts using GEE) to write into the bucket, assign write permissions.
-
-1. Open the bucket you created (e.g., `post-fire-assessment-data`)
-2. Go to the **Permissions** tab
-3. Click **“Grant Access”**
-4. In **New principals**, add:
+* Ensure the service account email matches the one used by your GEE scripts.
+* Permission changes may take a few minutes to propagate.
