@@ -235,7 +235,7 @@ def main():
         nargs="+",
         help=(
             "List of deliverables to generate OR a paper preset name. "
-            "Example: --deliverables DNBR_VISUAL "
+            "Example: --deliverables DNBR_VISUAL DNBR_AREA_STATISTICS"
             "or --deliverables PAPER_DENIZ_FUSUN_RAMAZAN"
         ),
     )
@@ -253,7 +253,7 @@ def main():
         default=70,
         help=(
             "Maximum allowed CLOUDY_PIXEL_PERCENTAGE for Sentinel-2 scenes "
-            "(default: 70). Higher values include more cloudy scenes."
+            "(default: 100). Higher values include more cloudy scenes."
         ),
     )
 
@@ -294,9 +294,9 @@ def main():
                 geojson_path=str(roi_path),
                 start_date=cfg["start_date"],
                 end_date=cfg["end_date"],
-                days_before_after=cfg["days_before_after"],
-                cloud_threshold=args.cloud_threshold,
                 deliverables=preset["deliverables"],
+                days_before_after=1,
+                cloud_threshold=100,
                 gcs_bucket=gcs_bucket_name,
                 verbose=True,
             )
@@ -343,87 +343,93 @@ def main():
                             values["ratio_percent"],
                         )
 
-        return  # ⬅️ IMPORTANT: stop execution here
+    else: 
 
-    # ─────────────────────────────
-    # NORMAL MODE
-    # ─────────────────────────────
+        # ─────────────────────────────
+        # NORMAL MODE
+        # ─────────────────────────────
 
-    if args.deliverables:
-        deliverables = [Deliverable[name.upper()]
-                        for name in args.deliverables]
-    else:
-        deliverables = list(Deliverable)
+        if args.deliverables:
+            deliverables = [Deliverable[name.upper()]
+                            for name in args.deliverables]
+        else:
+            deliverables = list(Deliverable)
 
-    if not args.roi or not args.start_date or not args.end_date:
-        raise ValueError("--roi, --start-date and --end-date are required")
+        if not args.roi or not args.start_date or not args.end_date:
+            raise ValueError("--roi, --start-date and --end-date are required")
 
-    geojson_path = Path(args.roi).expanduser().resolve()
-    if not geojson_path.exists():
-        raise FileNotFoundError(f"GeoJSON not found: {geojson_path}")
+        geojson_path = Path(args.roi).expanduser().resolve()
+        if not geojson_path.exists():
+            raise FileNotFoundError(f"GeoJSON not found: {geojson_path}")
 
-    runner = PostFireAssessment(
-        gee_key_json=gee_key_json,
-        geojson_path=str(geojson_path),
-        start_date=args.start_date,
-        end_date=args.end_date,
-        days_before_after=args.days_before_after,
-        cloud_threshold=args.cloud_threshold,
-        deliverables=deliverables, 
-        gcs_bucket=gcs_bucket_name,
-        verbose=True,
-    )
-
-    result = runner.run()
-
-    # ─────────────────────────────
-    # Provenance (GEE images used)
-    # ─────────────────────────────
-
-    prov = result.get("provenance", {})
-
-    logger.info("Pre-fire images used:")
-    for img in prov.get("pre_fire", {}).get("images", []):
-        logger.info(
-            "  %s | %s | cloud=%.1f",
-            img["date"],
-            img["id"],
-            img["cloud_percent"],
+        runner = PostFireAssessment(
+            gee_key_json=gee_key_json,
+            geojson_path=str(geojson_path),
+            start_date=args.start_date,
+            end_date=args.end_date,
+            days_before_after=args.days_before_after,
+            cloud_threshold=args.cloud_threshold,
+            deliverables=deliverables, 
+            gcs_bucket=gcs_bucket_name,
+            verbose=True,
         )
 
-    logger.info("Post-fire images used:")
-    for img in prov.get("post_fire", {}).get("images", []):
-        logger.info(
-            "  %s | %s | cloud=%.1f",
-            img["date"],
-            img["id"],
-            img["cloud_percent"],
-        )
+        result = runner.run()
 
-    if result["scientific"]:
-        logger.info("Scientific outputs:")
-        for name, item in result["scientific"].items():
+        prov = result.get("provenance", {})
+
+        pre_fire_images = prov.get("pre_fire", {}).get("images", [])
+        if not pre_fire_images:
+            raise RuntimeError(
+                "No pre-fire images found for the selected period and cloud threshold."
+            )
+        logger.info("Pre-fire images used:")
+        for img in pre_fire_images:
             logger.info(
-                "  %s -> %s (gee_task_id=%s)",
-                name,
-                item["url"],
-                item.get("gee_task_id"),
+                "  %s | %s | cloud=%.1f",
+                img["date"],
+                img["id"],
+                img["cloud_percent"],
             )
 
-    logger.info("Visual outputs:")
-    for name, item in result["visual"].items():
-        logger.info("  %s -> %s", name, item["url"])
-
-    logger.info("Statistics:")
-    for stat_name, stat_value in result["statistics"].items():
-        logger.info("  %s:", stat_name)
-        for cls, values in stat_value.items():
-            logger.info(
-                "    %-20s | Area (ha): %8.2f | Ratio (%%): %6.2f",
-                cls,
-                values["area_ha"],
-                values["ratio_percent"],
+        post_fire_images = prov.get("post_fire", {}).get("images", [])
+        if not post_fire_images:
+            raise RuntimeError(
+                "No post-fire images found for the selected period and cloud threshold."
             )
+        logger.info("Post-fire images used:")
+        for img in post_fire_images:
+            logger.info(
+                "  %s | %s | cloud=%.1f",
+                img["date"],
+                img["id"],
+                img["cloud_percent"],
+            )
+
+        if result["scientific"]:
+            logger.info("Scientific outputs:")
+            for name, item in result["scientific"].items():
+                logger.info(
+                    "  %s -> %s (gee_task_id=%s)",
+                    name,
+                    item["url"],
+                    item.get("gee_task_id"),
+                )
+
+        logger.info("Visual outputs:")
+        for name, item in result["visual"].items():
+            logger.info("  %s -> %s", name, item["url"])
+
+        logger.info("Statistics:")
+        for stat_name, stat_value in result["statistics"].items():
+            logger.info("  %s:", stat_name)
+            for cls, values in stat_value.items():
+                logger.info(
+                    "    %-20s | Area (ha): %8.2f | Ratio (%%): %6.2f",
+                    cls,
+                    values["area_ha"],
+                    values["ratio_percent"],
+                )
 
     
 if __name__ == "__main__":
@@ -441,6 +447,13 @@ if __name__ == "__main__":
     try:
         main()
         print(SUCCESS_MSG)
+
+    # Errors intentionally raised by the library
+    except (RuntimeError, ValueError, FileNotFoundError) as e:
+        print(f"\nERROR: {e}\n")
+        sys.exit(2)
+
+    # Any unexpected / programming error
     except Exception:
         print(ERROR_MSG)
         sys.exit(2)
