@@ -1,4 +1,4 @@
-## 🔧 Task Monitoring for Scientific Deliverables (Asynchronous Mode)
+## Task Monitoring for Scientific Deliverables (Asynchronous Mode)
 
 Scientific deliverables (GeoTIFF exports) are generated in **Google Earth Engine as asynchronous tasks**.
 This allows frontend applications and external systems to:

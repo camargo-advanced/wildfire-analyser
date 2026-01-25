@@ -18,11 +18,6 @@
 # - Define export parameters (region, scale, maxPixels, format).
 # - Return stable references (GCS URL and task ID) for downstream consumers.
 #
-# This module does NOT:
-# - Validate scientific correctness of the image.
-# - Perform visualization or thumbnail generation.
-# - Block execution waiting for task completion.
-#
 # Copyright (C) 2025
 # Marcelo Camargo
 #

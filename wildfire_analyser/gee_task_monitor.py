@@ -1,4 +1,30 @@
 # SPDX-License-Identifier: MIT
+#
+# Google Earth Engine (GEE) task monitoring utility.
+#
+# This module provides a small command-line utility to monitor the execution
+# state of a Google Earth Engine task until it completes, fails, or is cancelled.
+#
+# It is intended to be used in automated workflows where GEE export tasks
+# (e.g. Export.image.toCloudStorage) are triggered asynchronously and their
+# completion must be tracked before proceeding to the next pipeline step.
+#
+# Design notes:
+# - Authentication is handled via a service account JSON provided through
+#   the GEE_PRIVATE_KEY_JSON environment variable.
+# - Task monitoring uses ee.data.getTaskStatus and assumes a single task ID.
+# - Polling is time-based and does not rely on callbacks or webhooks.
+#
+# Responsibilities of this module:
+# - Authenticate against Google Earth Engine using non-interactive credentials.
+# - Monitor the lifecycle of a single GEE task.
+# - Provide a simple CLI interface for integration into scripts and pipelines.
+#
+# Copyright (C) 2025
+# Marcelo Camargo.
+#
+# This file is part of wildfire-analyser and is distributed under the terms
+# of the MIT license. See the LICENSE file for details.
 
 import argparse
 import json

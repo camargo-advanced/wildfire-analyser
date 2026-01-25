@@ -16,11 +16,6 @@
 # - Compute analysis time windows relative to fire events.
 # - Centralize date arithmetic logic used by collection builders.
 #
-# This module does NOT:
-# - Perform any Earth Engine operations.
-# - Validate user input beyond basic date parsing.
-# - Define processing dependencies or deliverables.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

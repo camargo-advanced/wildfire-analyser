@@ -20,11 +20,6 @@
 # - Validate and parse the service account JSON credentials.
 # - Initialize the Earth Engine client with service account credentials.
 #
-# This module does NOT:
-# - Manage Google Cloud IAM permissions.
-# - Register or configure GCP projects for Earth Engine usage.
-# - Perform any Earth Engine computation or data access beyond initialization.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

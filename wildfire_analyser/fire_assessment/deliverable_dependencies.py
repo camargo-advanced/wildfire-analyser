@@ -20,11 +20,6 @@
 # - Serve as the single source of truth for DAG construction.
 # - Ensure consistent reuse of intermediate products across deliverables.
 #
-# This module does NOT:
-# - Implement processing logic for any dependency.
-# - Execute Earth Engine operations directly.
-# - Perform validation or error handling.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

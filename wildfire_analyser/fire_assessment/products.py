@@ -21,11 +21,6 @@
 # - Register execution functions for each Dependency.
 # - Encapsulate Earth Engine computation logic.
 #
-# This module does NOT:
-# - Define dependency relationships (see dependency_graph.py).
-# - Define user-facing deliverables (see deliverables.py).
-# - Control execution order or scheduling.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

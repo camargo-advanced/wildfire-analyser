@@ -15,11 +15,6 @@
 # - Dispatch results to visualization, statistics, or export paths.
 # - Aggregate provenance metadata for traceability.
 #
-# This module does NOT:
-# - Implement scientific algorithms (see products.py).
-# - Perform visualization rendering logic (see visualization/).
-# - Handle storage backends beyond dispatching exports.
-#
 # Copyright (C) 2025
 # Marcelo Camargo
 #

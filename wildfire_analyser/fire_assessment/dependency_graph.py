@@ -22,11 +22,6 @@
 # - Serve as the canonical DAG consumed by the resolver.
 # - Ensure deterministic and reproducible pipeline execution.
 #
-# This module does NOT:
-# - Execute any Earth Engine operation.
-# - Define user-facing deliverables.
-# - Perform validation or error handling.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

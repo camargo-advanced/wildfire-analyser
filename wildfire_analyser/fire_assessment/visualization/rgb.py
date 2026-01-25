@@ -21,11 +21,6 @@
 # - Overlay the ROI boundary for contextual interpretation.
 # - Return Earth Engine Images suitable for thumbnail generation.
 #
-# This module does NOT:
-# - Perform atmospheric correction or spectral analysis.
-# - Compute burn indices or severity metrics.
-# - Trigger Earth Engine execution or data export by itself.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

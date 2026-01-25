@@ -24,11 +24,6 @@
 # - Orchestrate pipeline execution via PostFireAssessment.
 # - Format and report outputs for human consumption.
 #
-# This module does NOT:
-# - Implement scientific algorithms or Earth Engine logic.
-# - Define processing dependencies or DAG structure.
-# - Provide reusable library APIs.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

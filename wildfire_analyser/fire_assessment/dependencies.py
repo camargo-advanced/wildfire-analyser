@@ -24,11 +24,6 @@
 # - Serve as the internal nodes of the DAG executed by the resolver.
 # - Provide a stable contract between deliverables and processing logic.
 #
-# This module does NOT:
-# - Expose user-facing outputs or results.
-# - Implement processing logic for any dependency.
-# - Perform Earth Engine execution directly.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

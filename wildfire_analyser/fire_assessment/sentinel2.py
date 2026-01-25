@@ -33,11 +33,6 @@
 # - Apply spatial and metadata-based filtering.
 # - Normalize reflectance bands for downstream processing.
 #
-# This module does NOT:
-# - Implement burn indices or statistics.
-# - Perform DAG execution or dependency resolution.
-# - Define user-facing deliverables.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

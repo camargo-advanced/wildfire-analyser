@@ -20,11 +20,6 @@
 # - Overlay the ROI boundary for contextual visualization.
 # - Return an Earth Engine Image suitable for thumbnail generation.
 #
-# This module does NOT:
-# - Compute NDVI or dNDVI values.
-# - Perform quantitative analysis or area statistics.
-# - Trigger Earth Engine execution or data export by itself.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

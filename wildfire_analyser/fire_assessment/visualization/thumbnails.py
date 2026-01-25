@@ -21,11 +21,6 @@
 # - Apply spatial clipping to the ROI bounding box.
 # - Define thumbnail rendering parameters (dimensions, format).
 #
-# This module does NOT:
-# - Perform scientific computation or validation.
-# - Export or persist imagery to storage backends.
-# - Block execution waiting for server-side processing.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

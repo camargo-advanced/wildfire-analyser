@@ -22,11 +22,6 @@
 # - Detect and prevent circular dependency graphs.
 # - Produce an ordered execution plan for the pipeline executor.
 #
-# This module does NOT:
-# - Execute any processing logic or Earth Engine operations.
-# - Define dependency relationships (see dependency_graph.py).
-# - Expose user-facing deliverables.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #

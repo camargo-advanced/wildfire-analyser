@@ -21,11 +21,6 @@
 # - Coordinate DAG execution using the dependency resolver.
 # - Manage shared execution context and result caching.
 #
-# This module does NOT:
-# - Define dependency relationships (see dependency_graph.py).
-# - Implement processing logic (see products.py).
-# - Perform authentication or I/O operations.
-#
 # Copyright (C) 2025
 # Marcelo Camargo.
 #
