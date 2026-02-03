@@ -142,7 +142,6 @@ python3 -m wildfire_analyser.cli \
     DNBR_AREA_STATISTICS
 ```
 
-
 This will:
 
 * Run the post-fire assessment pipeline
