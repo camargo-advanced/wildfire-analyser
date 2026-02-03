@@ -110,7 +110,7 @@ python3 -m wildfire_analyser.cli \
   --deliverables \
     DNBR_VISUAL \
     DNBR_AREA_STATISTICS \
-  --days-before-after 1
+  --days-before-after 0
 ```
 
 ---

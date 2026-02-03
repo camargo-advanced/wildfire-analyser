@@ -59,6 +59,8 @@ class PostFireAssessment:
         deliverables: List[Deliverable],
         cloud_threshold: int = 100,
         days_before_after: int = 30,
+        pre_fire_mosaic_strategy: str = "pixel_quality_hybrid_fallback",
+        post_fire_mosaic_strategy: str = "pixel_quality_hybrid_fallback",
         gcs_bucket: str | None = None,
         verbose: bool = False,
     ):
@@ -85,6 +87,8 @@ class PostFireAssessment:
             end_date=end_date,
             cloud_threshold=cloud_threshold,
             days_before_after=days_before_after,
+            pre_fire_mosaic_strategy=pre_fire_mosaic_strategy,
+            post_fire_mosaic_strategy=post_fire_mosaic_strategy,
         )
 
     def run(self) -> Dict[str, Any]:

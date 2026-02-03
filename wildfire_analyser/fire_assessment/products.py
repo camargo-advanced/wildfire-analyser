@@ -34,6 +34,9 @@ import ee
 from wildfire_analyser.fire_assessment.dependencies import Dependency
 from wildfire_analyser.fire_assessment.time_windows import compute_fire_time_windows
 from wildfire_analyser.fire_assessment.sentinel2 import gather_collection
+from wildfire_analyser.fire_assessment.mosaic_strategies import (
+    apply_mosaic_strategy,
+)
 
 ProductExecutor = Callable[[Any], Any]
 PRODUCT_REGISTRY: Dict[Dependency, ProductExecutor] = {}
@@ -53,11 +56,11 @@ def register(dep: Dependency):
 @register(Dependency.COLLECTION_GATHERING)
 def gather_collection_node(context):
     roi = context.inputs["roi"]
-    cloud_threshold = context.inputs.get("cloud_threshold")
+    #cloud_threshold = context.inputs.get("cloud_threshold")
 
     return gather_collection(
         roi=roi,
-        cloud_threshold=cloud_threshold,
+        #cloud_threshold=cloud_threshold,
     )
 
 
@@ -105,7 +108,16 @@ def build_pre_fire_mosaic(context):
     if pre_collection is None:
         raise RuntimeError("PRE_FIRE_COLLECTION not available")
 
-    return pre_collection.mosaic()
+    strategy = context.inputs.get(
+        "pre_fire_mosaic_strategy",
+        "naive",
+    )
+
+    return apply_mosaic_strategy(
+        pre_collection,
+        strategy,
+        context,
+    )
 
 
 @register(Dependency.POST_FIRE_MOSAIC)
@@ -114,7 +126,16 @@ def build_post_fire_mosaic(context):
     if post_collection is None:
         raise RuntimeError("POST_FIRE_COLLECTION not available")
 
-    return post_collection.mosaic()
+    strategy = context.inputs.get(
+        "post_fire_mosaic_strategy",
+        "naive",
+    )
+
+    return apply_mosaic_strategy(
+        post_collection,
+        strategy,
+        context,
+    )
 
 
 @register(Dependency.RGB_PRE_FIRE)

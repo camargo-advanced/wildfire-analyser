@@ -126,8 +126,22 @@ python3 -m wildfire_analyser.cli \
     DNDVI_AREA_STATISTICS \
     RBR_AREA_STATISTICS \
   --days-before-after 0
-
 ```
+
+or:
+
+```bash
+python3 -m wildfire_analyser.cli \
+  --roi polygons/eejatai.geojson \
+  --start-date 2024-09-26 \
+  --end-date 2024-10-05 \
+  --deliverables \
+    RGB_PRE_FIRE_VISUAL \
+    RGB_POST_FIRE_VISUAL \
+    DNBR_VISUAL \
+    DNBR_AREA_STATISTICS
+```
+
 
 This will:
 

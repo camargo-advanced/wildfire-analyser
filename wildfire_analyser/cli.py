@@ -439,16 +439,16 @@ if __name__ == "__main__":
         "All deliverables were generated as expected.\n"
     )
 
-    try:
-        main()
-        print(SUCCESS_MSG)
+    # try:
+    main()
+    print(SUCCESS_MSG)
 
-    # Errors intentionally raised by the library
-    except (RuntimeError, ValueError, FileNotFoundError) as e:
-        print(f"\nERROR: {e}\n")
-        sys.exit(2)
+    # # Errors intentionally raised by the library
+    # except (RuntimeError, ValueError, FileNotFoundError) as e:
+    #     print(f"\nERROR: {e}\n")
+    #     sys.exit(2)
 
-    # Any unexpected / programming error
-    except Exception:
-        print(ERROR_MSG)
-        sys.exit(2)
+    # # Any unexpected / programming error
+    # except Exception:
+    #     print(ERROR_MSG)
+    #     sys.exit(2)
