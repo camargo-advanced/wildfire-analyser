@@ -30,10 +30,10 @@
 
 
 from wildfire_analyser.fire_assessment.deliverables import Deliverable
-from wildfire_analyser.fire_assessment.dependencies import Dependency
+from wildfire_analyser.fire_assessment.mosaic_strategies import MosaicStrategy
 
 
 __all__ = [
     "Deliverable",
-    "Dependency",
+    "MosaicStrategy",
 ]

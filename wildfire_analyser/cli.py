@@ -40,6 +40,8 @@ from pathlib import Path
 
 from wildfire_analyser.fire_assessment.post_fire_assessment import PostFireAssessment
 from wildfire_analyser.fire_assessment.deliverables import Deliverable
+from wildfire_analyser.fire_assessment.mosaic_strategies import MosaicStrategy
+
 
 # ─────────────────────────────
 # Logging setup
@@ -294,8 +296,8 @@ def main():
                 deliverables=preset["deliverables"],
                 days_before_after=1,
                 cloud_threshold=100,
-                pre_fire_mosaic_strategy = "best_available_scene",
-                post_fire_mosaic_strategy = "best_available_scene",
+                pre_fire_mosaic_strategy = MosaicStrategy.BEST_DATE_MASKED_MOSAIC,
+                post_fire_mosaic_strategy = MosaicStrategy.BEST_DATE_MASKED_MOSAIC,
                 gcs_bucket=gcs_bucket_name,
                 verbose=True,
             )

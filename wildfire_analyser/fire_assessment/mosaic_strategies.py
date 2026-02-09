@@ -21,21 +21,46 @@ Marcelo Camargo.
 
 import ee
 
+from enum import Enum
+import ee
+
+
+class MosaicStrategy(str, Enum):
+    """
+    Public-facing mosaic strategy identifiers.
+
+    These values define the compositing policy applied to an ImageCollection.
+    """
+
+    # Date-based strategies
+    BEST_DATE_MOSAIC = "best_date_mosaic"
+    BEST_DATE_MASKED_MOSAIC = "best_date_masked_mosaic"
+
+    # Tile-based strategies (default)
+    BEST_AVAILABLE_PER_TILE_MOSAIC = "best_available_per_tile_mosaic"
+
+    # Pixel-based strategies
+    CLOUD_MASKED_LIGHT_MOSAIC = "cloud_masked_light_mosaic"
+
 
 def apply_mosaic_strategy(
     collection: ee.ImageCollection,
-    strategy: str,
+    strategy,
     context,
 ) -> ee.Image:
     """
     Apply a named mosaic strategy to an ImageCollection.
     """
 
+    # Accept Enum or raw string
+    if isinstance(strategy, MosaicStrategy):
+        strategy = strategy.value
+
     strategies = {
-        "best_date_mosaic": best_date_mosaic,
-        "best_date_masked_mosaic": best_date_masked_mosaic,
-        "best_available_per_tile_mosaic": best_available_per_tile_mosaic,
-        "cloud_masked_light_mosaic": cloud_masked_light_mosaic,
+        MosaicStrategy.BEST_DATE_MOSAIC.value: best_date_mosaic,
+        MosaicStrategy.BEST_DATE_MASKED_MOSAIC.value: best_date_masked_mosaic,
+        MosaicStrategy.BEST_AVAILABLE_PER_TILE_MOSAIC.value: best_available_per_tile_mosaic,
+        MosaicStrategy.CLOUD_MASKED_LIGHT_MOSAIC.value: cloud_masked_light_mosaic,
     }
 
     func = strategies.get(strategy)
